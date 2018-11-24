@@ -1,5 +1,5 @@
 //Teensy based RC controller for FRC using XBOX Controller Driver (XINPUT) 
-//Supports buttons, analog sticks, and 
+//Supports buttons, analog sticks, and rumble.
 //Originally implemented using the JJRC Q35-01 transmitter which retails for around $15
 //  HT1621 LCD driver chip.
 //  Teensy 3.5
@@ -71,6 +71,10 @@ void setup() {
   analogReadResolution(ANALOG_RES);
 
   //TODO: Add analog stick calibration. Store to eeprom
+  //      Store Min, Zero, Max, Checksum for each axis.
+  //      Hold button(s) on startup to enter cal mode.
+  //      Hold same buttons for duration to leave cal mode.
+  //      Vibrate for confirmation of entering/exiting mode.
 }
 
 /**
@@ -106,8 +110,7 @@ void loop() {
   analogWrite(VIBE1PIN, controller.rumbleValues[0]);
   analogWrite(VIBE2PIN, controller.rumbleValues[1]);
   
-  //Update LCD
-  //TODO
+  //TODO: Update LCD
 
   controller.LEDUpdate();     //Update the LEDs
   controller.sendXinput();    //Send data
