@@ -16,5 +16,5 @@ Originally implemented using the JJRC Q35-01 transmitter which retails for aroun
 -  Deploy sketch to Teensy
 
 ## Rumble Circuit
-The teensy analog output pins run up to 3.3v and cannot source a significant current. To drive the vibration motors from the teensy, and circuit like the following should be used:
+The teensy analog output pins run up to 3.3v and cannot source a significant current. To drive the vibration motors from the teensy, and circuit like the following should be used:  
 ![](images/circuit.png)
