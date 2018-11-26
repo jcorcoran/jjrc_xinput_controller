@@ -33,4 +33,14 @@ Note that the software drives this transistor from an analog output channel on t
 We're able to plug a transistor into this analog outputpin, because of the fact that it's actually a digital output being PWMed. The signal ocming out of the analog pin is always either 3.3v or 0v. As long as the transistor's switching times can keep up with the frequency that the analog output pin is being driven, then the motor's speed will be controllable from the Teensy. The analog pin's voltage % output will be 1:1 with the percentage of the bus voltage driving the motor.
 
 ## LCD Interface
+A USB logic analyzer was used to monitor communications between the stock microcontroller and the LCD. Using these communication dumps and the names used for pins on the LCD PCB, it was possible to identify the LCD driver chip as most likely being a HT1621.
+
 For details on how the LCD driver chip works refer to: https://www.seeedstudio.com/document/HT1621.pdf
+
+The HT1621 LCD driver chip has a fairly simple command interface. Communications with the LCD happen over a three pin interface (CS, WR, DATA).
+-  **CS** (Chip Select) - held low when communicating with the LCD. Appears as though this pin must transition high between commands.
+-  **WR** (Write) - Clocks in the data into the LCD. State of Data pin read on rising edges of WR. 
+-  **DATA** (Data) - the data to be clocked into the LCD 
+The commands allow direct control of the LCDs display memory. Memory is organized in 32 segments (6 address bits). Each segment contains 4 data bits. This organization structure directly maps to the physical interface this chip has to the LCD itself,  4 COM lines and 32 SEG lines. This allows up to 32x4 unique patterns to be displayed on the LCD. "Up to" because this is dependant on how many segments are actually present on the LCD and how it was wired. 
+The HT1621 supports arbitrarily writing to any memory segment or a speed optimized command which allows writing data to successive segments without continually providing the address to write into. While this would improve performance, it looks like the stock implementation doesn't bother using this command. It walks successive memory addresses, but always uses the verbose write command (providing the explicit memory address along with each 4 bit data block). My only guess as to why the developers may have written their software this way (other than just being lazy) is that there may be some fault tolerance provided. If data were to be malformed/corrupted, there's no way for one fault to propogate through the remainder of your data set. Worst case you have a single segment get corrupted.
+ 
