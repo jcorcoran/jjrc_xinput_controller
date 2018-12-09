@@ -16,7 +16,7 @@ Supports buttons, analog sticks, and rumble.
 -  Deploy this sketch to Teensy
 
 ## JJRC control board pinout
-![](images/pinout.png)
+![](images/pinout2.png)
 The Plan is to desolder the STM8S003F3 and RF chips from the RC transmitter's main control board. All Teensy IO signals come back to this central location. The picture above identifies where relevant signals are located on the PCB. These signals need to be wired up to the Teensy at the pins designated in the code.  
 
 ### STM8S Reuse
