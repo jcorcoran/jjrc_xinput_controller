@@ -17,7 +17,15 @@ Supports buttons, analog sticks, and rumble.
 
 ## JJRC control board pinout
 ![](images/pinout.png)
-The Plan is to desolder the STM8S003F3 and RF chips from the RC transmitter's main control board. All Teensy IO signals come back to this central location. The picture above identifies where relevant signals are located on the PCB. These signals need to be wired up to the Teensy at the pins designated in the code.
+The Plan is to desolder the STM8S003F3 and RF chips from the RC transmitter's main control board. All Teensy IO signals come back to this central location. The picture above identifies where relevant signals are located on the PCB. These signals need to be wired up to the Teensy at the pins designated in the code.  
+
+### STM8S Reuse
+__NOTE:__ *It should be possible to re-program the STM8 onboard this PCB.
+It looks like worst case the manufacturer could have enabled the read-out protection (ROP) feature on the processor. ROP will prevent program memory from being read. The ROP register can be cleared however, allowing the device to be re-programmed. Clearing the ROP register has the side effect of erasing the contents of memory however.  
+This approach isn't being persued further due to the lack of USB support in the STM8S chip. If a USB interface/peripherial could be added that would allow the device to report as a USB XInput device, this would likely be the preferred path forward as it would minimize hardware rework required.*  
+-  See section 4.5.1 of [RM0016 Reference manual](https://www.st.com/content/ccc/resource/technical/document/reference_manual/9a/1b/85/07/ca/eb/4f/dd/CD00190271.pdf/files/CD00190271.pdf/jcr:content/translations/en.CD00190271.pdf)
+-  [STM8S datasheet](https://www.st.com/resource/en/datasheet/DM00024550.pdf)
+-  [PM0051 Programming manual](https://www.st.com/content/ccc/resource/technical/document/programming_manual/0f/82/71/32/87/2a/46/f2/CD00191343.pdf/files/CD00191343.pdf/jcr:content/translations/en.CD00191343.pdf)
 
 ### TeensyLC Pinout
 <img src="https://www.pjrc.com/teensy/card6a_rev2.png" width="400" title="Teensy LC">
