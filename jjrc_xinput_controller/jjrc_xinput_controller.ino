@@ -15,6 +15,8 @@
 #include <Bounce.h>
 #include <xinput.h> //Include the XINPUT library
 
+#include "src/ht1621_LCD/ht1621_LCD.h"
+
 //Pinouts chosend to try to keep compatible with TeensyLC implementation
 //BUTTON INPUT PINS
 #define B1PIN 0         //"Forward fine tuning"
@@ -36,9 +38,11 @@
 #define LEDPIN 13       //
 
 //LCD INTERFACE
-#define LCD_CSPIN 10    //
-#define LCD_MOSIPIN 11  //
-#define LCD_MISOPIN 12  //
+#define LCD_CSPIN   10    //
+#define LCD_WRPIN   11    // 
+#define LCD_DATAPIN 12    //
+
+ht1621_LCD lcd;
 
 #define ANALOG_RES 13   // Resolution of the analog reads (bits)
 #define MILLIDEBOUNCE 20  //Debounce time in milliseconds
@@ -69,6 +73,13 @@ void setup() {
 
   //Increase resolution of analog inputs.
   analogReadResolution(ANALOG_RES);
+
+  lcd.setup(LCD_CSPIN, LCD_WRPIN, LCD_DATAPIN);
+  lcd.conf();
+  LCDSegsOff();
+  LCDSegsOn();
+  delay(2000);
+  LCDSegsOff();
 
   //TODO: Add analog stick calibration. Store to eeprom
   //      Store Min, Zero, Max, Checksum for each axis.
@@ -110,9 +121,34 @@ void loop() {
   analogWrite(VIBE1PIN, controller.rumbleValues[0]);
   analogWrite(VIBE2PIN, controller.rumbleValues[1]);
   
-  //TODO: Update LCD
+  //Update LCD
+  //updateLCD();
 
   controller.LEDUpdate();     //Update the LEDs
   controller.sendXinput();    //Send data
   controller.receiveXinput(); //Receive data
+
+  walkLCDSegments(0x31, 2000);
+}
+
+void LCDSegsOff() {
+  //Write all zeros to addresses 0x00 through 0x31
+  for(int i = 0; i < 0X31; i++) {
+    lcd.wrclrdata(i, 0X00);
+  }
+}
+
+void LCDSegsOn() {
+  //Write all ones to addresses 0x00 through 0x31
+  for(int i = 0; i < 0X31; i++) {
+    lcd.wrclrdata(i, 0xFF);
+  }
+}
+
+void walkLCDSegments(unsigned char addr, int delay_ms) {
+  for(int i=0; i < addr; i++) {
+    lcd.wrclrdata(i,0xff);
+    delay(delay_ms);
+    lcd.wrclrdata(i,0x00);
+  }
 }
