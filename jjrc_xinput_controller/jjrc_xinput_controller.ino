@@ -47,6 +47,113 @@ ht1621_LCD lcd;
 #define ANALOG_RES 13   // Resolution of the analog reads (bits)
 #define MILLIDEBOUNCE 20  //Debounce time in milliseconds
 
+//Seven segment number positions are represented
+// as follows:
+//        -A-     -A-
+//  B    F   B   F   B
+//        -G-     -G-
+//  C    E   C   E   C
+//        -D-     -D-
+// Hund.  Tens    Ones
+
+//LCD Pixel map
+//0xADDR, 0xDATA, Description
+//{{0x0A, 0x10}, //Y Tens E
+// {0x0A, 0x20}, //Y Tens G
+// {0x0A, 0x40}, //Y Tens F
+// {0x0A, 0x80}, //Y Hundreds "1" (B and C)
+// {0x0B, 0x10}, //Y Tens D
+// {0x0B, 0x20}, //Y Tens C
+// {0x0B, 0x40}, //Y Tens B
+// {0x0B, 0x80}, //Y Tens A
+// {0x0C, 0x10}, //Y Ones E
+// {0x0C, 0x20}, //Y Ones G
+// {0x0C, 0x40}, //Y Ones F
+// {0x0C, 0x80}, //Y Percent Symbol
+// {0x0D, 0x10}, //Y Ones D
+// {0x0C, 0x20}, //Y Ones C
+// {0x0C, 0x40}, //Y Ones B
+// {0x0C, 0x80}, //Y Ones A
+
+// {0x0E, 0x20}, //Y Bar graph pos 0 (lowest)
+// {0x0E, 0x40}, //Y Bar graph pos 1
+// {0x0E, 0x80}, //Y Bar graph pos 2
+// {0x0F, 0x80}, //Y Bar graph pos 3
+// {0x0F, 0x40}, //Y Bar graph pos 4
+// {0x0F, 0x20}, //Y Bar graph pos 5
+// {0x0F, 0x10}, //Y Bar graph pos 6 (highest)
+// {0x0E, 0x10}, //Y Border around bar graph
+
+// {0x10, 0x10}, //X Bar graph pos 0 (left most)
+// {0x10, 0x20}, //X Bar graph pos 1
+// {0x10, 0x40}, //X Bar graph pos 2
+// {0x10, 0x80}, //X Bar graph pos 3
+// {0x1F, 0x40}, //X Bar graph pos 4
+// {0x1F, 0x20}, //X Bar graph pos 5
+// {0x1F, 0x10}, //X Bar graph pos 6 (right most)
+// {0x1F, 0x80}, //X Border around bar graph
+
+// {0x11, 0x10}, //X Tens E
+// {0x11, 0x20}, //X Tens G
+// {0x11, 0x40}, //X Tens F
+// {0x11, 0x80}, //X Hundreds "1" (B and C)
+// {0x12, 0x10}, //X Tens D
+// {0x12, 0x20}, //X Tens C
+// {0x12, 0x40}, //X Tens B
+// {0x12, 0x80}, //X Tens A
+// {0x13, 0x10}, //X Ones E
+// {0x13, 0x20}, //X Ones G
+// {0x13, 0x40}, //X Ones F
+// {0x14, 0x10}, //X Ones D
+// {0x14, 0x20}, //X Ones C
+// {0x14, 0x40}, //X Ones B
+// {0x14, 0x80}, //X Ones A
+
+// {0x15, 0x10}, //Video Icon
+// {0x15, 0x20}, //X Percent Symbol
+// {0x15, 0x40}, //Photo Icon
+
+// {0x16, 0x10}, //Voltage Tenths B
+// {0x16, 0x20}, //Voltage Tenths G
+// {0x16, 0x40}, //Voltage Tenths C
+// {0x16, 0x80}, //Voltage "V" label
+// {0x17, 0x10}, //Voltage Tenths A
+// {0x17, 0x20}, //Voltage Tenths F
+// {0x17, 0x40}, //Voltage Tenths E
+// {0x17, 0x80}, //Voltage Tenths D
+// {0x18, 0x10}, //Voltage Ones B
+// {0x18, 0x20}, //Voltage Ones G
+// {0x18, 0x40}, //Voltage Ones C
+// {0x18, 0x80}, //Voltage Decimal Point
+// {0x19, 0x10}, //Voltage Ones A
+// {0x19, 0x20}, //Voltage Ones F
+// {0x19, 0x40}, //Voltage Ones E
+// {0x19, 0x80}, //Voltage Ones D
+
+// {0x1B, 0x10}, //Speedometer pos 0 (left most)
+// {0x1B, 0x20}, //Speedometer pos 1
+// {0x1B, 0x40}, //Speedometer pos 2
+// {0x1B, 0x80}, //Speedometer pos 3
+// {0x1E, 0x80}, //Speedometer pos 4
+// {0x1E, 0x40}, //Speedometer pos 5
+// {0x1E, 0x20}, //Speedometer pos 6
+// {0x1E, 0x10}, //Speedometer pos 7
+// {0x1A, 0x20}, //Speedometer pos 8
+// {0x1A, 0x40}, //Speedometer pos 9 (right most)
+// {0x1A, 0x10}, //Speedometer labels
+// {0x1A, 0x80}, //Speedometer KM/H label
+
+// {0x1d, 0x40}, //Signal meter pos 0 (left most)
+// {0x1d, 0x20}, //Signal meter pos 1
+// {0x1d, 0x10}, //Signal meter pos 2
+// {0x1c, 0x10}, //Signal meter pos 3
+// {0x1c, 0x20}, //Signal meter pos 4 (right most)
+// {0x1c, 0x40}, //"Mode1" Indicator
+// {0x1d, 0x80}, //Signal meter Antenna Symbol
+
+
+
+
 //Initiate the class and setup the LED pin
 XINPUT controller(LED_ENABLED, LEDPIN);
 
@@ -61,7 +168,7 @@ int wheelValue = 0;
 int triggerValue = 0;
 
 void setup() {
-//  Serial3.begin(115200);
+  //Serial5.begin(115200);
   
   //Set pin modes
   pinMode(B1PIN, INPUT_PULLUP);
@@ -128,7 +235,7 @@ void loop() {
   controller.sendXinput();    //Send data
   controller.receiveXinput(); //Receive data
 
-  walkLCDSegments(0x31, 2000);
+  walkLCDSegments(32, 200);
 }
 
 void LCDSegsOff() {
@@ -146,9 +253,27 @@ void LCDSegsOn() {
 }
 
 void walkLCDSegments(unsigned char addr, int delay_ms) {
+//  boolean last_button = false;
+//  boolean current_button = false;
+  
   for(int i=0; i < addr; i++) {
-    lcd.wrclrdata(i,0xff);
-    delay(delay_ms);
+    for(int j=0x8; j < 0xff; j <<= 1) {
+      Serial5.print("addr=");
+      Serial5.print(i,HEX);
+      Serial5.print(", data=");
+      Serial5.println(j, HEX);
+      
+      lcd.wrclrdata(i,j);
+      delay(delay_ms);
+
+//      while(!(!last_button && current_button)) {
+//        b1.update();
+//        last_button = current_button;
+//        current_button = !b1.read();
+//      }
+//      current_button = false;
+//      last_button = false;
+    }
     lcd.wrclrdata(i,0x00);
   }
 }
