@@ -14,10 +14,6 @@
 ht1621_LCD::ht1621_LCD() {
 }
 
-void nop() {
-	(void)0;
-}
-
 void ht1621_LCD::setup(int cs, int wr, int dat, int backlight) {
 	_cs=cs;
 	_wr=wr;
@@ -34,6 +30,10 @@ void ht1621_LCD::setup(int cs, int wr, int dat, int backlight) {
 		pinMode(_backlight, OUTPUT);
 		//digitalWrite(_backlight, HIGH);
 	}
+
+	//initialize the LCD data buffer
+	setAll(0x00);
+
 	delay(100);
 }
 void ht1621_LCD::setup(int cs, int wr, int dat) {
@@ -150,4 +150,62 @@ void ht1621_LCD::conf() {
 }
 void ht1621_LCD::display(unsigned char addr, unsigned char sdata){
 	wrone(addr,sdata);
+}
+
+/**
+ * Set the entire contents of the local LCD memory buffer to val.
+ */
+void ht1621_LCD::setAll(char val) {
+	for(int i=0; i<LCD_DATA_LEN; i++) {
+		_lcd_data[i] = val;
+	}
+}
+
+/**
+ * Write out entire contents of local LCD memory buffer to the display.
+ */
+void ht1621_LCD::update() {
+	for(int i=0; i < LCD_DATA_LEN; i++) {
+		wrclrdata(i, _lcd_data[i]);
+	}
+}
+
+/**
+ * Set the data value of a specific address in the local LCD memory buffer.
+ * Call refresh to dump the buffer to the LCD.
+ */ 
+void ht1621_LCD::setByte(int address, char val) {
+	if(address < LCD_DATA_LEN) {
+		_lcd_data[address] = val;
+	}
+}
+
+char ht1621_LCD::getByte(int address) {
+	char ret = 0x00;
+	if(address < LCD_DATA_LEN) {
+		ret = _lcd_data[address];
+	}
+	return ret;
+}
+
+/**
+ * Masks-in set bits into the LCD local memory buffer. Any zeroed bit positions
+ *   in val will stay unmodified in the LCD local memory buffer.
+ */
+void ht1621_LCD::setBits(int address, char val) {
+	char foo = 0x00;
+	if(address < LCD_DATA_LEN) {
+		foo = getByte(address) | val;
+		setByte(address, foo);
+	}
+}
+
+/**
+ * Mask-out (clear) the non-zero bits passed in 'val'. Any zeroed bit posiitons
+ *   in val will stay unmodified in the LCD local memory buffer.
+ */
+void ht1621_LCD::clearBits(int address, char val) {
+	if(address < LCD_DATA_LEN) {
+		setByte(address, getByte(address) & (~val)); 
+	}
 }
