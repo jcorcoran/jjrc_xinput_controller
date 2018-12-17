@@ -129,42 +129,42 @@ SEG X_BAR_5 = {0x1F, 0x20}; //X Bar graph pos 5
 SEG X_BAR_6 = {0x1F, 0x10}; //X Bar graph pos 6 (right most)
 SEG X_BAR_BORDER = {0x1F, 0x80}; //X Border around bar graph
 
-// {0x11, 0x80}, //X Hundreds "1" (B and C)
-// {0x11, 0x10}, //X Tens E
-// {0x11, 0x20}, //X Tens G
-// {0x11, 0x40}, //X Tens F
-// {0x12, 0x10}, //X Tens D
-// {0x12, 0x20}, //X Tens C
-// {0x12, 0x40}, //X Tens B
-// {0x12, 0x80}, //X Tens A
-// {0x13, 0x10}, //X Ones E
-// {0x13, 0x20}, //X Ones G
-// {0x13, 0x40}, //X Ones F
-// {0x14, 0x10}, //X Ones D
-// {0x14, 0x20}, //X Ones C
-// {0x14, 0x40}, //X Ones B
-// {0x14, 0x80}, //X Ones A
+SEG X_HUNDS = {0x11, 0x80}; //X Hundreds "1" (B and C)
+SEG X_TENS_A = {0x12, 0x80}; //X Tens A
+SEG X_TENS_B = {0x12, 0x40}; //X Tens B
+SEG X_TENS_C = {0x12, 0x20}; //X Tens C
+SEG X_TENS_D = {0x12, 0x10}; //X Tens D
+SEG X_TENS_E = {0x11, 0x10}; //X Tens E
+SEG X_TENS_F = {0x11, 0x40}; //X Tens F
+SEG X_TENS_G = {0x11, 0x20}; //X Tens G
+SEG X_ONES_A = {0x14, 0x80}; //X Ones A
+SEG X_ONES_B = {0x14, 0x40}; //X Ones B
+SEG X_ONES_C = {0x14, 0x20}; //X Ones C
+SEG X_ONES_D = {0x14, 0x10}; //X Ones D
+SEG X_ONES_E = {0x13, 0x10}; //X Ones E
+SEG X_ONES_F = {0x13, 0x40}; //X Ones F
+SEG X_ONES_G = {0x13, 0x20}; //X Ones G
+SEG X_PERCENT = {0x15, 0x20}; //X Percent Symbol
 
-// {0x15, 0x10}, //Video Icon
-// {0x15, 0x20}, //X Percent Symbol
-// {0x15, 0x40}, //Photo Icon
+SEG VIDEO = {0x15, 0x10}; //Video Icon
+SEG CAMERA = {0x15, 0x40}; //Photo Icon
 
-// {0x19, 0x10}, //Voltage Ones A
-// {0x18, 0x10}, //Voltage Ones B
-// {0x18, 0x40}, //Voltage Ones C
-// {0x19, 0x80}, //Voltage Ones D
-// {0x19, 0x40}, //Voltage Ones E
-// {0x19, 0x20}, //Voltage Ones F
-// {0x18, 0x20}, //Voltage Ones G
-// {0x18, 0x80}, //Voltage Decimal Point
-// {0x17, 0x10}, //Voltage Tenths A
-// {0x16, 0x10}, //Voltage Tenths B
-// {0x16, 0x40}, //Voltage Tenths C
-// {0x17, 0x80}, //Voltage Tenths D
-// {0x17, 0x40}, //Voltage Tenths E
-// {0x17, 0x20}, //Voltage Tenths F
-// {0x16, 0x20}, //Voltage Tenths G
-// {0x16, 0x80}, //Voltage "V" label
+SEG VOLT_ONES_A = {0x19, 0x10}; //Voltage Ones A
+SEG VOLT_ONES_B = {0x18, 0x10}; //Voltage Ones B
+SEG VOLT_ONES_C = {0x18, 0x40}; //Voltage Ones C
+SEG VOLT_ONES_D = {0x19, 0x80}; //Voltage Ones D
+SEG VOLT_ONES_E = {0x19, 0x40}; //Voltage Ones E
+SEG VOLT_ONES_F = {0x19, 0x20}; //Voltage Ones F
+SEG VOLT_ONES_G = {0x18, 0x20}; //Voltage Ones G
+SEG VOLT_DP = {0x18, 0x80}; //Voltage Decimal Point
+SEG VOLT_TENT_A = {0x17, 0x10}; //Voltage Tenths A
+SEG VOLT_TENT_B = {0x16, 0x10}; //Voltage Tenths B
+SEG VOLT_TENT_C = {0x16, 0x40}; //Voltage Tenths C
+SEG VOLT_TENT_D = {0x17, 0x80}; //Voltage Tenths D
+SEG VOLT_TENT_E = {0x17, 0x40}; //Voltage Tenths E
+SEG VOLT_TENT_F = {0x17, 0x20}; //Voltage Tenths F
+SEG VOLT_TENT_G = {0x16, 0x20}; //Voltage Tenths G
+SEG VOLT_LABEL = {0x16, 0x80}; //Voltage "V" label
 
 SEG SPEED_0 = {0x1B, 0x10}; //Speedometer pos 0 (left most)
 SEG SPEED_1 = {0x1B, 0x20}; //Speedometer pos 1
@@ -402,27 +402,14 @@ void updateGauge(analog_indicator gaugeID, int val, int min, int max) {
   }
 
   index = map(val, min, max, 0, gauge.gauge_len - 1);
-//  Serial5.print("i=");
-//  Serial5.print(val);
-//  Serial5.print(", map=");
-//  Serial5.println(index);
   if(gauge.gauge_len != 0) {
     //Walk through the segments and turn one on, turn others off
     for(int i=0; i < gauge.gauge_len; i++) {
-//      Serial5.print("  ");
       if(index == i) {
-//        Serial5.print("setting  bit:");
         setSeg(gauge.segs[i]);
       } else {
-//        Serial5.print("clearing bit:");
         clearSeg(gauge.segs[i]);
       }
-//      Serial5.print(i);
-//      Serial5.print(" [");
-//      Serial5.print(gauge.segs[i].addr,HEX);
-//      Serial5.print(",");
-//      Serial5.print(gauge.segs[i].data_pos,HEX);
-//      Serial5.println("]");
     }
   }
 }
