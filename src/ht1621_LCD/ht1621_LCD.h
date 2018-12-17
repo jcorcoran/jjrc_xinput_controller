@@ -6,149 +6,55 @@
  * 	https://github.com/anxzhu/segment-lcd-with-ht1621
  * 
  ********************************************************************/
+#ifndef ht1621_LCD_
+#define ht1621_LCD_
 
-#include <Arduino.h>
-#include "ht1621_LCD.h"
-#include "floatToString.h"
-#include "stdio.h"
+							// ID,  Command Code, Description
+#define  BIAS     0x52		//0b100 0010-1001-0,  1/3 Bias, 4 commons
+#define  SYSDIS   0X00		//0b100 0000-0000-0,  Turn off both system oscillator and LCD bias generator
+#define  SYSEN    0X02		//0b100 0000-0001-0,  Turn on system oscillator
+#define  LCDOFF   0X04		//0b100 0000-0010-0
+#define  LCDON    0X06		//0b100 0000-0011-0
+#define  XTAL     0x28		//0b100 0001-0100-0
+#define  RC256    0X30		//0b100 0001-1000-0,  System clock source, on-chip RC oscillator
+#define  TONEON   0X12		//0b100 0000-1001-0
+#define  TONEOFF  0X10		//0b100 0000-1000-0
+#define  WDTDIS1  0X0A		//0b100 0000-0101-0,  Disable WDT time-out flag output
 
-ht1621_LCD::ht1621_LCD() {
-}
+#define LCD_DATA_LEN 32
 
-void nop() {
-	(void)0;
-}
-
-void ht1621_LCD::setup(int cs, int wr, int dat, int backlight) {
-	_cs=cs;
-	_wr=wr;
-	_dat=dat;
-	_backlight=backlight;
-
-	pinMode(_cs, OUTPUT);
-	digitalWrite(_cs, HIGH);
-	pinMode(_wr, OUTPUT);
-	digitalWrite(_wr, HIGH);
-	pinMode(_dat, OUTPUT);
-	digitalWrite(_dat, HIGH);
-	if (_backlight > 0) {
-		pinMode(_backlight, OUTPUT);
-		//digitalWrite(_backlight, HIGH);
-	}
-	delay(100);
-}
-void ht1621_LCD::setup(int cs, int wr, int dat) {
-	setup(cs, wr, dat, -1);
-}
-void ht1621_LCD::wrDATA(unsigned char data, unsigned char cnt) {
-	unsigned char i;
-	for (i = 0; i < cnt; i++) {
-		digitalWrite(_wr, HIGH);
-		digitalWrite(_wr, HIGH);
-		digitalWrite(_wr, HIGH);
-		if (data & 0x80) {
-			digitalWrite(_dat, HIGH);
-			digitalWrite(_dat, HIGH);
-			digitalWrite(_dat, HIGH);
-			digitalWrite(_dat, HIGH);
-			digitalWrite(_dat, HIGH);
-			digitalWrite(_dat, HIGH);
-		} else {
-			digitalWrite(_dat, LOW);
-			digitalWrite(_dat, LOW);
-			digitalWrite(_dat, LOW);
-			digitalWrite(_dat, LOW);
-			digitalWrite(_dat, LOW);
-			digitalWrite(_dat, LOW);
-		}
-		digitalWrite(_wr, LOW);
-		digitalWrite(_wr, LOW);
-		digitalWrite(_wr, LOW);
-		digitalWrite(_wr, LOW);
-		digitalWrite(_wr, LOW);
-		digitalWrite(_wr, LOW);
-		digitalWrite(_wr, LOW);
-		digitalWrite(_wr, LOW);
-		digitalWrite(_wr, LOW);
-		data <<= 1;
-	}
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-	digitalWrite(_wr, HIGH);
-}
-void ht1621_LCD::wrclrdata(unsigned char addr, unsigned char sdata)
+class  ht1621_LCD
 {
-	addr <<= 2;
-	digitalWrite(_cs, LOW);
-	digitalWrite(_cs, LOW);
-	digitalWrite(_cs, LOW);
-	digitalWrite(_cs, LOW);
-	digitalWrite(_cs, LOW);
-	digitalWrite(_cs, LOW);
-	digitalWrite(_cs, LOW);
-	wrDATA(0xa0, 3);
-	wrDATA(addr, 6);
-	wrDATA(sdata, 4);
-	digitalWrite(_cs, HIGH);
-	digitalWrite(_cs, HIGH);
-	digitalWrite(_cs, HIGH);
-	digitalWrite(_cs, HIGH);
-	digitalWrite(_cs, HIGH);
-	digitalWrite(_cs, HIGH);
-}
-
-void ht1621_LCD::lcdon() {
-	wrCMD(LCDON);
-}
-
-void ht1621_LCD::lcdoff() {
-	wrCMD(LCDOFF);
-}
-
-void ht1621_LCD::wrone(unsigned char addr, unsigned char sdata) {
-	addr <<= 2;
-	digitalWrite(_cs, LOW);
-	wrDATA(0xa0, 3);
-	wrDATA(addr, 6);
-	wrDATA(sdata, 4);
-	digitalWrite(_cs, HIGH);
-}
-void ht1621_LCD::backlighton() {
-	if(_backlight > 0) {
-		digitalWrite(_backlight, HIGH);
-		delay(1);
-	}
-}
-void ht1621_LCD::backlightoff() {
-	if(_backlight > 0) {
-		digitalWrite(_backlight, LOW);
-		delay(1);
-	}
-}
-void ht1621_LCD::wrCMD(unsigned char CMD) {  //100
-	digitalWrite(_cs, LOW);
-	wrDATA(0x80, 4);
-	wrDATA(CMD, 8);
-	digitalWrite(_cs, HIGH);
-}
-void ht1621_LCD::conf() {
-	wrCMD(RC256);
-	wrCMD(BIAS);
-	wrCMD(SYSDIS);
-	wrCMD(WDTDIS1);
-	wrCMD(SYSEN);
-	wrCMD(LCDON);
+public:
+	int cs;
+	int wr;
+	int dat;
+	int backlight;
+	ht1621_LCD();
+	void setup(int cs, int wr, int dat, int backlight);
+	void setup(int cs, int wr, int dat);
+	void conf();
+	void display(unsigned char addr, unsigned char sdata);//
+	void backlighton();//
+	void backlightoff();//
+	void wrone(unsigned char addr, unsigned char sdata);
+	void wrclrdata(unsigned char addr, unsigned char sdata);
+	void wrDATA(unsigned char data, unsigned char cnt);
+	void wrCMD(unsigned char CMD);
+	void lcdon();
+	void lcdoff();
+	void setAll(char val);
+	void update();
+	void setByte(int address, char val);
+	char getByte(int address);
+	void setBits(int address, char val);
+	void clearBits(int address, char val);
+private:
+	int _cs;
+	int _wr;
+	int _dat;
+	int _backlight;
 	
-}
-void ht1621_LCD::display(unsigned char addr, unsigned char sdata){
-	wrone(addr,sdata);
-}
+	char _lcd_data[LCD_DATA_LEN];
+};
+#endif
