@@ -16,6 +16,7 @@
 #include <xinput.h> //Include the XINPUT library
 
 #include "src/ht1621_LCD/ht1621_LCD.h"
+#include "src/fSevSeg/fSevSeg.h"
 
 //Pinouts chosend to try to keep compatible with TeensyLC implementation
 //BUTTON INPUT PINS
@@ -47,13 +48,6 @@ ht1621_LCD lcd;
 #define ANALOG_RES 13   // Resolution of the analog reads (bits)
 #define MILLIDEBOUNCE 20  //Debounce time in milliseconds
 
-struct SEG {
-  char addr;     //address this LCD segment resides within
-  char data_pos; //bit position in data field for the LCD segment 
-};
-
-const SEG NUL_SEG = {0x0, 0x0};
-
 enum analog_indicator {
   wheel,        //hosizontal bar (numeric and gauge)
   throttle,     //vertical bar (numeric and gauge)
@@ -80,112 +74,16 @@ struct ANALOG_T {
 //        -D-     -D-
 // Hund.  Tens    Ones
 
-struct SEVEN_SEG {
-  SEG A;
-  SEG B;
-  SEG C;
-  SEG D;
-  SEG E;
-  SEG F;
-  SEG G;
-};
+DIGIT y_ones = {Y_ONES_A, Y_ONES_B, Y_ONES_C, Y_ONES_D, Y_ONES_E, Y_ONES_F, Y_ONES_G};
+DIGIT y_tens = {Y_TENS_A, Y_TENS_B, Y_TENS_C, Y_TENS_D, Y_TENS_E, Y_TENS_F, Y_TENS_G};
+DIGIT y_hunds = {NUL_SEG, Y_HUNDS, Y_HUNDS, NUL_SEG, NUL_SEG, NUL_SEG, NUL_SEG};
 
-//LCD Pixel map
-SEG Y_HUNDS = {0x0A, 0x80}; //Y Hundreds "1" (B and C)
-SEG Y_TENS_A = {0x0B, 0x80}; //Y Tens A
-SEG Y_TENS_B = {0x0B, 0x40}; //Y Tens B
-SEG Y_TENS_C = {0x0B, 0x20}; //Y Tens C
-SEG Y_TENS_D = {0x0B, 0x10}; //Y Tens D
-SEG Y_TENS_E = {0x0A, 0x10}; //Y Tens E
-SEG Y_TENS_F = {0x0A, 0x40}; //Y Tens F
-SEG Y_TENS_G = {0x0A, 0x20}; //Y Tens G
-SEG Y_ONES_A = {0x0C, 0x80}; //Y Ones A
-SEG Y_ONES_B = {0x0C, 0x40}; //Y Ones B
-SEG Y_ONES_C = {0x0C, 0x20}; //Y Ones C
-SEG Y_ONES_D = {0x0D, 0x10}; //Y Ones D
-SEG Y_ONES_E = {0x0C, 0x10}; //Y Ones E
-SEG Y_ONES_F = {0x0C, 0x40}; //Y Ones F
-SEG Y_ONES_G = {0x0C, 0x20}; //Y Ones G
-SEG Y_PERCENT = {0x0C, 0x80}; //Y Percent Symbol
+DIGIT x_ones = {X_ONES_A, X_ONES_B, X_ONES_C, X_ONES_D, X_ONES_E, X_ONES_F, X_ONES_G};
+DIGIT x_tens = {X_TENS_A, X_TENS_B, X_TENS_C, X_TENS_D, X_TENS_E, X_TENS_F, X_TENS_G};
+DIGIT x_hunds = {NUL_SEG, X_HUNDS, X_HUNDS, NUL_SEG, NUL_SEG, NUL_SEG, NUL_SEG};
 
-SEVEN_SEG y_ones = {Y_ONES_A, Y_ONES_B, Y_ONES_C, Y_ONES_D, Y_ONES_E, Y_ONES_F, Y_ONES_G};
-SEVEN_SEG y_tens = {Y_TENS_A, Y_TENS_B, Y_TENS_C, Y_TENS_D, Y_TENS_E, Y_TENS_F, Y_TENS_G};
-
-SEG Y_BAR_0 = {0x0E, 0x20}; //Y Bar graph pos 0 (lowest)
-SEG Y_BAR_1 = {0x0E, 0x40}; //Y Bar graph pos 1
-SEG Y_BAR_2 = {0x0E, 0x80}; //Y Bar graph pos 2
-SEG Y_BAR_3 = {0x0F, 0x80}; //Y Bar graph pos 3
-SEG Y_BAR_4 = {0x0F, 0x40}; //Y Bar graph pos 4
-SEG Y_BAR_5 = {0x0F, 0x20}; //Y Bar graph pos 5
-SEG Y_BAR_6 = {0x0F, 0x10}; //Y Bar graph pos 6 (highest)
-SEG Y_BAR_BORDER = {0x0E, 0x10}; //Y Border around bar graph
-
-SEG X_BAR_0 = {0x10, 0x10}; //X Bar graph pos 0 (left most)
-SEG X_BAR_1 = {0x10, 0x20}; //X Bar graph pos 1
-SEG X_BAR_2 = {0x10, 0x40}; //X Bar graph pos 2
-SEG X_BAR_3 = {0x10, 0x80};//X Bar graph pos 3
-SEG X_BAR_4 = {0x1F, 0x40}; //X Bar graph pos 4
-SEG X_BAR_5 = {0x1F, 0x20}; //X Bar graph pos 5
-SEG X_BAR_6 = {0x1F, 0x10}; //X Bar graph pos 6 (right most)
-SEG X_BAR_BORDER = {0x1F, 0x80}; //X Border around bar graph
-
-SEG X_HUNDS = {0x11, 0x80}; //X Hundreds "1" (B and C)
-SEG X_TENS_A = {0x12, 0x80}; //X Tens A
-SEG X_TENS_B = {0x12, 0x40}; //X Tens B
-SEG X_TENS_C = {0x12, 0x20}; //X Tens C
-SEG X_TENS_D = {0x12, 0x10}; //X Tens D
-SEG X_TENS_E = {0x11, 0x10}; //X Tens E
-SEG X_TENS_F = {0x11, 0x40}; //X Tens F
-SEG X_TENS_G = {0x11, 0x20}; //X Tens G
-SEG X_ONES_A = {0x14, 0x80}; //X Ones A
-SEG X_ONES_B = {0x14, 0x40}; //X Ones B
-SEG X_ONES_C = {0x14, 0x20}; //X Ones C
-SEG X_ONES_D = {0x14, 0x10}; //X Ones D
-SEG X_ONES_E = {0x13, 0x10}; //X Ones E
-SEG X_ONES_F = {0x13, 0x40}; //X Ones F
-SEG X_ONES_G = {0x13, 0x20}; //X Ones G
-SEG X_PERCENT = {0x15, 0x20}; //X Percent Symbol
-
-SEG VIDEO = {0x15, 0x10}; //Video Icon
-SEG CAMERA = {0x15, 0x40}; //Photo Icon
-
-SEG VOLT_ONES_A = {0x19, 0x10}; //Voltage Ones A
-SEG VOLT_ONES_B = {0x18, 0x10}; //Voltage Ones B
-SEG VOLT_ONES_C = {0x18, 0x40}; //Voltage Ones C
-SEG VOLT_ONES_D = {0x19, 0x80}; //Voltage Ones D
-SEG VOLT_ONES_E = {0x19, 0x40}; //Voltage Ones E
-SEG VOLT_ONES_F = {0x19, 0x20}; //Voltage Ones F
-SEG VOLT_ONES_G = {0x18, 0x20}; //Voltage Ones G
-SEG VOLT_DP = {0x18, 0x80}; //Voltage Decimal Point
-SEG VOLT_TENT_A = {0x17, 0x10}; //Voltage Tenths A
-SEG VOLT_TENT_B = {0x16, 0x10}; //Voltage Tenths B
-SEG VOLT_TENT_C = {0x16, 0x40}; //Voltage Tenths C
-SEG VOLT_TENT_D = {0x17, 0x80}; //Voltage Tenths D
-SEG VOLT_TENT_E = {0x17, 0x40}; //Voltage Tenths E
-SEG VOLT_TENT_F = {0x17, 0x20}; //Voltage Tenths F
-SEG VOLT_TENT_G = {0x16, 0x20}; //Voltage Tenths G
-SEG VOLT_LABEL = {0x16, 0x80}; //Voltage "V" label
-
-SEG SPEED_0 = {0x1B, 0x10}; //Speedometer pos 0 (left most)
-SEG SPEED_1 = {0x1B, 0x20}; //Speedometer pos 1
-SEG SPEED_2 = {0x1B, 0x40}; //Speedometer pos 2
-SEG SPEED_3 = {0x1B, 0x80}; //Speedometer pos 3
-SEG SPEED_4 = {0x1E, 0x80}; //Speedometer pos 4
-SEG SPEED_5 = {0x1E, 0x40}; //Speedometer pos 5
-SEG SPEED_6 = {0x1E, 0x20}; //Speedometer pos 6
-SEG SPEED_7 = {0x1E, 0x10}; //Speedometer pos 7
-SEG SPEED_8 = {0x1A, 0x20}; //Speedometer pos 8
-SEG SPEED_9 = {0x1A, 0x40}; //Speedometer pos 9 (right most)
-SEG SPEED_BORDER = {0x1A, 0x10}; //Speedometer labels
-SEG SPEED_KMH = {0x1A, 0x80}; //Speedometer KM/H label
-
-SEG RADIO_0 = {0x1d, 0x40}; //Signal meter pos 0 (left most)
-SEG RADIO_1 = {0x1d, 0x20}; //Signal meter pos 1
-SEG RADIO_2 = {0x1d, 0x10}; //Signal meter pos 2
-SEG RADIO_3 = {0x1c, 0x10}; //Signal meter pos 3
-SEG RADIO_4 = {0x1c, 0x20}; //Signal meter pos 4 (right most)
-SEG RADIO_MODE1 = {0x1c, 0x40}; //"Mode1" Indicator
-SEG RADIO_ANT = {0x1d, 0x80}; //Signal meter Antenna Symbol
+DIGIT v_ones = {VOLT_ONES_A, VOLT_ONES_B, VOLT_ONES_C, VOLT_ONES_D, VOLT_ONES_E, VOLT_ONES_F, VOLT_ONES_G};
+DIGIT v_tenths = {VOLT_TENT_A, VOLT_TENT_B, VOLT_TENT_C, VOLT_TENT_D, VOLT_TENT_E, VOLT_TENT_F, VOLT_TENT_G};
 
 //Initiate the class and setup the LED pin
 XINPUT controller(LED_ENABLED, LEDPIN);
@@ -236,6 +134,8 @@ ANALOG_T radio_axis = {0,   //Initial val
                        {RADIO_0, RADIO_1, RADIO_2, RADIO_3, RADIO_4,
                         NUL_SEG, NUL_SEG, NUL_SEG, NUL_SEG, NUL_SEG}};
 
+fSevSeg y_segs, x_segs, volt_segs;
+
 void setup() {
   //Serial5.begin(115200);
   
@@ -262,6 +162,10 @@ void setup() {
   //      Hold button(s) on startup to enter cal mode.
   //      Hold same buttons for duration to leave cal mode.
   //      Vibrate for confirmation of entering/exiting mode.
+
+  y_segs.setup(&lcd, y_hunds, y_tens, y_ones, false);
+  x_segs.setup(&lcd, x_hunds, x_tens, x_ones, false);
+  volt_segs.setup(&lcd, v_ones, v_tenths, false);
   
   setBorders(true);
 }
@@ -272,6 +176,8 @@ void setup() {
 int scaleStick(int val) {
   return map(val, 0, pow(2,ANALOG_RES), -32768, 32767);
 }
+
+int count = 0;
 
 void loop() {
   int abs_throttle = 0;
@@ -312,18 +218,26 @@ void loop() {
   updateGauge(speedometer, abs_throttle, 0, 100);
   //updateGauge(radio, count, 0, 10);
 
+  //Update 7-segment sections
+  y_segs.DisplayInt(count);
+  x_segs.DisplayInt(count);
+  volt_segs.DisplayIntHex(count);
+
   //Dump LCD data out to the screen
   lcd.update();
+
+  count = count + 1;
+  delay(500);
 }
 
 void LCDSegsOff() {
-  //Write all zeros to addresses 0x00 through 0x31
+  //Write all zeros to LCD
   lcd.setAll(0x00);
   lcd.update();
 }
 
 void LCDSegsOn() {
-  //Write all ones to addresses 0x00 through 0x31
+  //Write all ones to LCD
   lcd.setAll(0xFF);
   lcd.update();
 }
@@ -342,32 +256,18 @@ void walkLCDSegments(unsigned char addr, int delay_ms) {
 }
 
 /**
- * Helper function to turn on a specified LCD segment.
- */
-void setSeg(SEG s) {
-  lcd.setBits(s.addr, s.data_pos);
-}
-
-/**
- * Helper function to turn off a specified LCD segment.
- */
-void clearSeg(SEG s) {
-  lcd.clearBits(s.addr, s.data_pos);
-}
-
-/**
  * Turn on/off border segments.
  * on - true = on, fales = off
  */
 void setBorders(boolean on) {
   if(on) {
-    setSeg(Y_BAR_BORDER);
-    setSeg(X_BAR_BORDER);
-    setSeg(SPEED_BORDER);
+    lcd.setSeg(Y_BAR_BORDER);
+    lcd.setSeg(X_BAR_BORDER);
+    lcd.setSeg(SPEED_BORDER);
   } else {
-    clearSeg(Y_BAR_BORDER);
-    clearSeg(X_BAR_BORDER);
-    clearSeg(SPEED_BORDER);
+    lcd.clearSeg(Y_BAR_BORDER);
+    lcd.clearSeg(X_BAR_BORDER);
+    lcd.clearSeg(SPEED_BORDER);
   }
 }
 
@@ -406,10 +306,11 @@ void updateGauge(analog_indicator gaugeID, int val, int min, int max) {
     //Walk through the segments and turn one on, turn others off
     for(int i=0; i < gauge.gauge_len; i++) {
       if(index == i) {
-        setSeg(gauge.segs[i]);
+        lcd.setSeg(gauge.segs[i]);
       } else {
-        clearSeg(gauge.segs[i]);
+        lcd.clearSeg(gauge.segs[i]);
       }
     }
   }
 }
+
