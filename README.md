@@ -4,8 +4,17 @@ Custom [Teensy](https://www.pjrc.com/teensy/) based RC controller for FRC using 
 Supports buttons, analog sticks, and rumble.
 -  Implemented using the JJRC Q35-01 transmitter which retails for around $15
 -  Using Teensy 3.5 for testing, plan to ultimately target the TeensyLC
--  10mm x 2mm Pancacke Vibration Motor
+-  10mm x 2mm Pancake Vibration Motor
 -  HT1621 LCD driver chip (integral to Q35-01)
+
+## Source Files
+*  __/jjrc_xinput_controller/__ - *Arduino project directory*
+    *  __src/fSevSeg__ - *Helper class for sending numerical data to the LCD (seven segment displays)*
+    *  __src/ht1621_LCD__ - *Helper class for interacting with the ht1621 LCD controller and mapping specific LCD segments for the JJRC controller.*
+    *  __jjrc_xinput_controller.ino__ - *Main arduino source*
+*  __/logic_analyzer/__ - *Summary and raw data collected between the stock microcontroller, in the JJRC transmitter, and the ht1621 LCD controller. raw captures can be viewed in [Saleae Logic](https://www.saleae.com/downloads/)*
+*  __/images/__ - *Pictures referenced from project markdown/readme files*
+
 
 ## Software Setup Instructions:
 -  Install Arduino IDE
