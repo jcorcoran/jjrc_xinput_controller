@@ -134,9 +134,9 @@ const uint8_t characterArray[] PROGMEM = {
   0b0000010, // 96  '`'
   0b1110111, // 97  'a'  SAME AS CAP
   0b0011111, // 98  'b'  SAME AS CAP
-  0b0001101, // 99  'c'
+  0b1001110, // 99  'c'  SAME AS CAP
   0b0111101, // 100 'd'  SAME AS CAP
-  0b1101111, // 101 'e'
+  0b1001111, // 101 'e'  SAME AS CAP
   0b1000111, // 102 'f'  SAME AS CAP
   0b1011110, // 103 'g'  SAME AS CAP
   0b0010111, // 104 'h'
