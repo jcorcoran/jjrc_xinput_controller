@@ -158,6 +158,7 @@ void calibrate() {
   y_segs.DisplayString("CA");
   x_segs.DisplayString("CA");
   volt_segs.DisplayString("CA");
+  setBorders(true);
   lcd.update();
   
   //Wait until the calibration button is released before procedding.
@@ -240,9 +241,7 @@ void setup() {
   //      Hold button(s) on startup to enter cal mode.
   //      Hold same buttons for duration to leave cal mode.
   //      Vibrate for confirmation of entering/exiting mode.
-
-  setBorders(true);
-
+  
   b1.update();
   if(!b1.read()) {
     //Must continue to hold button for 0.5s
@@ -254,6 +253,10 @@ void setup() {
       calibrate(); //Enter Calibration Mode
     }
   }
+
+  setBorders(true);
+  lcd.setSeg(Y_PERCENT);
+  lcd.setSeg(X_PERCENT);
 }
 
 /**
@@ -263,7 +266,8 @@ int scaleStick(analog_axis axis, int val) {
   int _max = 32767;
   int _min = -32768;
   int _zero = 0;
-  
+
+  //TODO: use the calibrated min/max/zero for each axis
   switch (axis) {
     case wheel_axis:
       break;
@@ -273,8 +277,6 @@ int scaleStick(analog_axis axis, int val) {
   
   return map(val, 0, pow(2,ANALOG_RES), _min, _max);
 }
-
-int count = 0;
 
 void loop() {
   int abs_throttle = 0;
@@ -325,12 +327,11 @@ void loop() {
   y_segs.DisplayInt(map(y_avg, 0, pow(2,ANALOG_RES), -100, 100));
   x_segs.DisplayInt(map(x_avg, 0, pow(2,ANALOG_RES), -100, 100));
 
-  volt_segs.DisplayIntHex(count);
+  //volt_segs.DisplayIntHex(count);
 
   //Dump LCD data out to the screen
   lcd.update();
 
-  count = count + 1;
   delay(40);
 }
 
