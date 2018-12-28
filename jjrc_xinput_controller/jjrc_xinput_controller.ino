@@ -100,6 +100,16 @@ Bounce b4 = Bounce(B4PIN, MILLIDEBOUNCE);
 Bounce b5 = Bounce(B5PIN, MILLIDEBOUNCE);
 Bounce b6 = Bounce(B6PIN, MILLIDEBOUNCE);
 
+struct CAL_DATA {
+  long x_min;
+  long x_zero;
+  long x_max;
+  long y_min;
+  long y_zero;
+  long y_max;
+  long cksum; //XOR of previous fields 
+};
+
 int wheelValue = 0;
 int triggerValue = 0;
 float y_avg = pow(2,ANALOG_RES)/2.0;
@@ -148,10 +158,15 @@ fSevSeg y_segs, x_segs, volt_segs;
 void calibrate() {
   boolean calFinished = false;
 
-  long x_min = pow(2,ANALOG_RES);
-  long x_max = 0x0;
-  long y_min = pow(2,ANALOG_RES);
-  long y_max = 0x0;
+  CAL_DATA cal;
+  
+  cal.x_min = pow(2,ANALOG_RES);
+  cal.x_zero = 0;
+  cal.x_max = 0;
+  cal.y_min = pow(2,ANALOG_RES);
+  cal.y_zero = 0;
+  cal.y_max = 0;
+  cal.cksum = 0;
 
   //Serial5.println("Entering Calibration Mode");
 
@@ -183,10 +198,10 @@ void calibrate() {
     updateGauge(throttle_ind, triggerValue, 0, pow(2,ANALOG_RES));
 
     //Update new min/max values
-    x_min = min(x_min, x_avg); 
-    x_max = max(x_max, x_avg);
-    y_min = min(y_min, y_avg);
-    y_max = max(y_max, y_avg);
+    cal.x_min = min(cal.x_min, x_avg); 
+    cal.x_max = max(cal.x_max, x_avg);
+    cal.y_min = min(cal.y_min, y_avg);
+    cal.y_max = max(cal.y_max, y_avg);
 
     b1.update();
     //Check if calibration is complete (button held for 1s)
@@ -199,8 +214,30 @@ void calibrate() {
     }
 
     if(calFinished) {
-      //Serial5.println("Calibration sequence finished.");
+      //Store zeros
+      cal.x_zero = x_avg;
+      cal.y_zero = y_avg;
+
+      //Calculate checksum
+      cal.cksum = cal.x_min ^ cal.x_zero ^ cal.x_max ^ cal.y_min ^ cal.y_zero ^ cal.y_max;
+      
+      Serial5.println("Calibration sequence finished.");
+      Serial5.print("  x_min:");
+      Serial5.println(cal.x_min, HEX);
+      Serial5.print("  x_zero:");
+      Serial5.println(cal.x_zero, HEX);
+      Serial5.print("  x_max:");
+      Serial5.println(cal.x_max, HEX);
+      Serial5.print("  y_min:");
+      Serial5.println(cal.y_min, HEX);
+      Serial5.print("  y_zero:");
+      Serial5.println(cal.y_zero, HEX);
+      Serial5.print("  y_max:");
+      Serial5.println(cal.y_max, HEX);
+      Serial5.print("  cksum:");
+      Serial5.println(cal.cksum, HEX);
       //Write to EEPROM
+      
     }
 
     lcd.update();
@@ -209,7 +246,7 @@ void calibrate() {
 }
 
 void setup() {
-  //Serial5.begin(115200);
+  Serial5.begin(115200);
   
   //Set pin modes
   pinMode(B1PIN, INPUT_PULLUP);
@@ -326,7 +363,7 @@ void loop() {
 
   y_segs.DisplayInt(map(y_avg, 0, pow(2,ANALOG_RES), -100, 100));
   x_segs.DisplayInt(map(x_avg, 0, pow(2,ANALOG_RES), -100, 100));
-
+  volt_segs.DisplayString("");
   //volt_segs.DisplayIntHex(count);
 
   //Dump LCD data out to the screen
