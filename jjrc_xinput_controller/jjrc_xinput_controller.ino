@@ -49,11 +49,16 @@ ht1621_LCD lcd;
 #define MILLIDEBOUNCE 20  //Debounce time in milliseconds
 
 enum analog_indicator {
-  wheel,        //hosizontal bar (numeric and gauge)
-  throttle,     //vertical bar (numeric and gauge)
-  volts,        //No gauge, just numeric
-  speedometer,  //No numerics, just gague
-  radio         //No numberics, just gauge
+  wheel_ind,        //horizontal bar (numeric and gauge)
+  throttle_ind,     //vertical bar (numeric and gauge)
+  volts_ind,        //No gauge, just numeric
+  speedometer_ind,  //No numerics, just gague
+  radio_ind         //No numberics, just gauge
+};
+
+enum analog_axis {
+  wheel_axis,
+  throttle_axis
 };
 
 struct ANALOG_T {
@@ -97,6 +102,10 @@ Bounce b6 = Bounce(B6PIN, MILLIDEBOUNCE);
 
 int wheelValue = 0;
 int triggerValue = 0;
+float y_avg = pow(2,ANALOG_RES)/2.0;
+float y_avg_last = pow(2,ANALOG_RES)/2.0;
+float x_avg = pow(2,ANALOG_RES)/2.0;
+float x_avg_last = pow(2,ANALOG_RES)/2.0;
 
 ANALOG_T y_axis =     {0,    //Initial val
                        -100, //Min
@@ -136,6 +145,68 @@ ANALOG_T radio_axis = {0,   //Initial val
 
 fSevSeg y_segs, x_segs, volt_segs;
 
+void calibrate() {
+  boolean calFinished = false;
+
+  long x_min = pow(2,ANALOG_RES);
+  long x_max = 0x0;
+  long y_min = pow(2,ANALOG_RES);
+  long y_max = 0x0;
+
+  //Serial5.println("Entering Calibration Mode");
+
+  y_segs.DisplayString("CA");
+  x_segs.DisplayString("CA");
+  volt_segs.DisplayString("CA");
+  lcd.update();
+  
+  //Wait until the calibration button is released before procedding.
+  while(!b1.read()){
+    b1.update();
+    delay(5);
+  }
+  
+  while(!calFinished) {
+    wheelValue = analogRead(AN1PIN);
+    triggerValue = analogRead(AN2PIN);
+
+    y_avg = iir(y_avg_last, triggerValue);
+    x_avg = iir(x_avg_last, wheelValue);
+    y_avg_last = y_avg;
+    x_avg_last = x_avg;
+
+    y_segs.DisplayIntHex(map(y_avg, 0, pow(2,ANALOG_RES), 0x00, 0xFF));
+    x_segs.DisplayIntHex(map(x_avg, 0, pow(2,ANALOG_RES), 0x00, 0xFF));
+
+    updateGauge(wheel_ind, wheelValue, 0, pow(2,ANALOG_RES));
+    updateGauge(throttle_ind, triggerValue, 0, pow(2,ANALOG_RES));
+
+    //Update new min/max values
+    x_min = min(x_min, x_avg); 
+    x_max = max(x_max, x_avg);
+    y_min = min(y_min, y_avg);
+    y_max = max(y_max, y_avg);
+
+    b1.update();
+    //Check if calibration is complete (button held for 1s)
+    for(int i=0; !b1.read() && !calFinished; i++) {
+      if(i > 100) {
+        calFinished=true;
+      }
+      b1.update();
+      delay(10);
+    }
+
+    if(calFinished) {
+      //Serial5.println("Calibration sequence finished.");
+      //Write to EEPROM
+    }
+
+    lcd.update();
+    delay(10);
+  }
+}
+
 void setup() {
   //Serial5.begin(115200);
   
@@ -152,9 +223,16 @@ void setup() {
 
   lcd.setup(LCD_CSPIN, LCD_WRPIN, LCD_DATAPIN);
   lcd.conf();
+  y_segs.setup(&lcd, y_hunds, y_tens, y_ones, false);
+  x_segs.setup(&lcd, x_hunds, x_tens, x_ones, false);
+  volt_segs.setup(&lcd, v_ones, v_tenths, false);
+  
   LCDSegsOff();
   LCDSegsOn();
-  delay(1000);
+  y_segs.DisplayString("21");
+  x_segs.DisplayString("68");
+  lcd.update();
+  delay(750);
   LCDSegsOff();
 
   //TODO: Add analog stick calibration. Store to eeprom
@@ -163,18 +241,37 @@ void setup() {
   //      Hold same buttons for duration to leave cal mode.
   //      Vibrate for confirmation of entering/exiting mode.
 
-  y_segs.setup(&lcd, y_hunds, y_tens, y_ones, false);
-  x_segs.setup(&lcd, x_hunds, x_tens, x_ones, false);
-  volt_segs.setup(&lcd, v_ones, v_tenths, false);
-  
   setBorders(true);
+
+  b1.update();
+  if(!b1.read()) {
+    //Must continue to hold button for 0.5s
+    for(int i=0; i<100 && !b1.read(); i++){
+      b1.update();
+      delay(5);
+    }
+    if(!b1.read()) {
+      calibrate(); //Enter Calibration Mode
+    }
+  }
 }
 
 /**
  * Scale the analog inputs to the range used by joystick function.
  */
-int scaleStick(int val) {
-  return map(val, 0, pow(2,ANALOG_RES), -32768, 32767);
+int scaleStick(analog_axis axis, int val) {
+  int _max = 32767;
+  int _min = -32768;
+  int _zero = 0;
+  
+  switch (axis) {
+    case wheel_axis:
+      break;
+    case throttle_axis:
+      break;
+  }
+  
+  return map(val, 0, pow(2,ANALOG_RES), _min, _max);
 }
 
 int count = 0;
@@ -201,7 +298,8 @@ void loop() {
   controller.buttonUpdate(BUTTON_START, !b6.read());
 
   //Update analog sticks
-  controller.stickUpdate(STICK_LEFT, scaleStick(wheelValue), scaleStick(triggerValue));
+  controller.stickUpdate(STICK_LEFT, scaleStick(wheel_axis, wheelValue),
+    scaleStick(throttle_axis, triggerValue));
 
   //Update rumbles
   analogWrite(VIBE1PIN, controller.rumbleValues[0]);
@@ -212,22 +310,28 @@ void loop() {
   controller.receiveXinput(); //Receive data
 
   //Update screen graphics
-  updateGauge(wheel, wheelValue, 0, pow(2,ANALOG_RES));
-  updateGauge(throttle, triggerValue, 0, pow(2,ANALOG_RES));
+  updateGauge(wheel_ind, wheelValue, 0, pow(2,ANALOG_RES));
+  updateGauge(throttle_ind, triggerValue, 0, pow(2,ANALOG_RES));
   abs_throttle = abs(map(triggerValue, 0, pow(2,ANALOG_RES), -100, 100));
-  updateGauge(speedometer, abs_throttle, 0, 100);
-  //updateGauge(radio, count, 0, 10);
+  updateGauge(speedometer_ind, abs_throttle, 0, 100);
+  //updateGauge(radio_ind, count, 0, 10);
 
   //Update 7-segment sections
-  y_segs.DisplayInt(count);
-  x_segs.DisplayInt(count);
+  y_avg = iir(y_avg_last, triggerValue);
+  x_avg = iir(x_avg_last, wheelValue);
+  y_avg_last = y_avg;
+  x_avg_last = x_avg;
+
+  y_segs.DisplayInt(map(y_avg, 0, pow(2,ANALOG_RES), -100, 100));
+  x_segs.DisplayInt(map(x_avg, 0, pow(2,ANALOG_RES), -100, 100));
+
   volt_segs.DisplayIntHex(count);
 
   //Dump LCD data out to the screen
   lcd.update();
 
   count = count + 1;
-  delay(500);
+  delay(40);
 }
 
 void LCDSegsOff() {
@@ -284,19 +388,19 @@ void updateGauge(analog_indicator gaugeID, int val, int min, int max) {
   int index;
     
   switch (gaugeID) {
-    case wheel:
+    case wheel_ind:
       gauge = x_axis;
       break;
-    case throttle:
+    case throttle_ind:
       gauge = y_axis;
       break;
-    case volts:
+    case volts_ind:
       gauge = volts_axis;
       break;
-    case speedometer:
+    case speedometer_ind:
       gauge = speed_axis;
       break;
-    case radio:
+    case radio_ind:
       gauge = radio_axis;
       break;
   }
@@ -311,6 +415,27 @@ void updateGauge(analog_indicator gaugeID, int val, int min, int max) {
         lcd.clearSeg(gauge.segs[i]);
       }
     }
+  }
+}
+
+float iir(float old_val, float new_val) {
+  float a = 0.70;
+  return ((old_val * a) + (new_val * (1.0 - a)));
+}
+
+long max(long a, long b) {
+  if(a > b) {
+    return a;
+  } else {
+    return b;
+  }
+}
+
+long min(long a, long b) {
+  if(a < b) {
+    return a;
+  } else {
+    return b;
   }
 }
 
