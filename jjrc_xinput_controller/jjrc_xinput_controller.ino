@@ -12,7 +12,6 @@
 // - Select yout Teensy board from Tools > Board in Arduino IDE
 // - Select Tools > Usb Type > XInput
 
-#include <Bounce.h>
 #include <EEPROM.h>
 #include <xinput.h> //Include the XINPUT library
 
@@ -54,7 +53,6 @@
 ht1621_LCD lcd;
 
 #define ANALOG_RES 13     // Resolution of the analog reads (bits)
-#define MILLIDEBOUNCE 20  // Debounce time in milliseconds
 
 #define BUTTON_TOL 300   // Allowable error in bits (Assuming 13bit precision ADC) from the measured button voltages.
                          // Worst case emperical separation between voltages was about 700 bits.
@@ -127,14 +125,16 @@ DIGIT v_tenths = {VOLT_TENT_A, VOLT_TENT_B, VOLT_TENT_C, VOLT_TENT_D, VOLT_TENT_
 XINPUT controller(LED_ENABLED, LEDPIN);
 
 struct CAL_DATA_T {
-  long x_min;
+  long x_min; //wheel
   long x_zero;
   long x_max;
-  long y_min;
+  long y_min; //trigger
   long y_zero;
   long y_max;
   long cksum; //XOR of previous fields 
 } cal_data;
+
+boolean cal_valid = false;
 
 int wheelValue = 0;
 int triggerValue = 0;
@@ -205,7 +205,6 @@ void setup() {
   x_segs.DisplayString("68");
   lcd.update();
   delay(500);
-  LCDSegsOff();
 
   //TODO: Add analog stick calibration. Store to eeprom
   //      Store Min, Zero, Max, Checksum for each axis.
@@ -223,31 +222,14 @@ void setup() {
     calibrate(); //Enter Calibration Mode
   }
 
+  LCDSegsOff();
+  
   //Load in CAL data from EEPROM
-  read_cal();
+  cal_valid = read_cal();
 
   setBorders(true);
   lcd.setSeg(Y_PERCENT);
   lcd.setSeg(X_PERCENT);
-}
-
-/**
- * Scale the analog inputs to the range used by joystick function.
- */
-int scaleStick(analog_axis axis, int val) {
-  int _max = 32767;
-  int _min = -32768;
-  int _zero = 0;
-
-  //TODO: use the calibrated min/max/zero for each axis
-  switch (axis) {
-    case wheel_axis:
-      break;
-    case throttle_axis:
-      break;
-  }
-  
-  return map(val, 0, pow(2,ANALOG_RES), _min, _max);
 }
 
 void loop() {
@@ -256,6 +238,12 @@ void loop() {
   //Read pin values
   wheelValue = analogRead(AN1PIN);
   triggerValue = analogRead(AN2PIN);
+
+  //If we have valid cal data, adjust the raw analog inputs
+  if(cal_valid) {
+    wheelValue = cal_scale_axis(wheel_axis, wheelValue);
+    triggerValue = cal_scale_axis(throttle_axis, triggerValue);
+  }
 
   //Update button states
   button_pressed = read_buttons();
@@ -267,8 +255,8 @@ void loop() {
   controller.buttonUpdate(BUTTON_START, button_pressed == RIGHT_MENU);
 
   //Update analog sticks
-  controller.stickUpdate(STICK_LEFT, scaleStick(wheel_axis, wheelValue),
-    scaleStick(throttle_axis, triggerValue));
+  controller.stickUpdate(STICK_LEFT, xinput_scale_sticks(wheelValue),
+    xinput_scale_sticks(triggerValue));
 
   //Update rumbles
   analogWrite(VIBE1PIN, controller.rumbleValues[0]);
@@ -542,6 +530,7 @@ boolean read_cal() {
   //Check checksum
   if(cal.cksum == (cal.x_min ^ cal.x_zero ^ cal.x_max ^ cal.y_min ^ cal.y_zero ^ cal.y_max)) {
     HWSERIAL.println("Checksum good.");
+    cal_data = cal;
     retval = true;
   } else {
     HWSERIAL.println("Checksum bad! :(");
@@ -572,4 +561,67 @@ void print_cal(CAL_DATA_T cal) {
   HWSERIAL.println(cal.y_max, HEX);
   HWSERIAL.print("  cksum:");
   HWSERIAL.println(cal.cksum, HEX);
+}
+
+/**
+ * Scale the analog inputs to the range used by joystick function.
+ */
+int xinput_scale_sticks(int val) {
+  int _out_max = 32767;
+  int _out_min = -32768;
+  int _in_min = 0;
+  int _in_max = pow(2,ANALOG_RES);
+  int _in_zero = (_in_max - _in_min)/2;
+  int ret = 0;
+
+  if(val >= _in_zero) { //Scale the high side
+    ret = map(val, _in_zero, _in_max, 0, _out_max);
+  } else {  //Scale the low side
+    ret = map(val, _in_min, _in_zero, _out_min, 0);
+  }
+
+  return ret;
+}
+
+/**
+ * Scale the analog inputs to the range used by display functions.
+ */
+int cal_scale_axis(analog_axis axis, int val) {
+  int _out_min = 0;
+  int _out_max = pow(2,ANALOG_RES);
+  int _out_zero = (_out_max - _out_min)/2;
+  int _in_min = _out_min;
+  int _in_max = _out_max;
+  int _in_zero = _out_zero;
+  int ret = 0;
+
+  if(cal_valid) {
+    switch (axis) {
+      case wheel_axis: //X
+        _in_max = cal_data.x_max;
+        _in_min = cal_data.x_min;
+        _in_zero = cal_data.x_zero;
+        break;
+      case throttle_axis: //Y
+        _in_max = cal_data.y_max;
+        _in_min = cal_data.y_min;
+        _in_zero = cal_data.y_zero;
+        break;
+    }
+  }
+
+  //Ensure inputs are in range
+  if(val < _in_min) {
+    val = _in_min;
+  } else if(val > _in_max) {
+    val = _in_max;
+  }
+
+  if(val >= _in_zero) { //Scale the high side
+    ret = map(val, _in_zero, _in_max, _out_zero, _out_max);
+  } else {  //Scale the low side
+    ret = map(val, _in_min, _in_zero, _out_min, _out_zero);
+  }
+
+  return ret;
 }
