@@ -13,27 +13,44 @@
 // - Select Tools > Usb Type > XInput
 
 #include <Bounce.h>
+#include <EEPROM.h>
 #include <xinput.h> //Include the XINPUT library
 
 #include "src/ht1621_LCD/ht1621_LCD.h"
 #include "src/fSevSeg/fSevSeg.h"
 
 //Pinouts chosend to try to keep compatible with TeensyLC implementation
-//BUTTON INPUT PINS
-#define B1PIN 0         //"Forward fine tuning"
-#define B2PIN 1         //"Left fine tuning"
-#define B3PIN 2         //"Right fine tuning"
-#define B4PIN 3         //"Backward fine tuning"
-#define B5PIN 4         //Left menu key
-#define B6PIN 5         //Left menu key
+//DIGITAL INPUT PINS
+#define B1PIN 0 //Temporary until the analog input buttons are functional
+
+//DIGITAL OUTPUT PINS
+#define LEDPIN 13       // Pin 13
+
+//LCD INTERFACE
+#define LCD_CSPIN   10  // Pin 10
+#define LCD_WRPIN   11  // Pin 11
+#define LCD_DATAPIN 12  // Pin 12
+
+//SERIAL DEBUG - Reserved
+//RX3 PIN 7             // Pin 7
+//TX3 PIN 8             // Pin 8
+#define HWSERIAL Serial3
 
 //ANALOG INPUT PINS
 #define AN1PIN 0        // Pin 14, Wheel (turning) 
 #define AN2PIN 1        // Pin 15, Trigger (acceleration)
-
+#define AN3PIN 2        // Pin 16, Buttons
+                        //         3.32V (0x1FFC) - No buttons pressed
+                        //         2.57V (0x18C7) - Right menu key
+                        //         2.29V (0x1610) - Left menu key
+                        //         1.88V (0x121E) - "Forward fine tuning" pressed
+                        //         1.27V (0x0C43) - "Left fine tuning" pressed
+                        //         0.44V (0x042F) - "Right fine tuning" pressed
+                        //         0.00V (0x0000) - "Backward fine tuning" pressed
+                        
 //ANALOG OUTPUT PINS
-#define VIBE1PIN 8      // Pin 22, 'Heavy' weight vibrator motor
-#define VIBE2PIN 9      // Pin 23, 'Light' weight vibrator motor
+#define VIBE1PIN 22      // Pin 22 (A8), 'Heavy' weight vibrator motor
+#define VIBE2PIN 23      // Pin 23 (A9), 'Light' weight vibrator motor
 
 //DIGITAL OUTPUT PINS
 #define LEDPIN 13       //
@@ -45,8 +62,31 @@
 
 ht1621_LCD lcd;
 
-#define ANALOG_RES 13   // Resolution of the analog reads (bits)
-#define MILLIDEBOUNCE 20  //Debounce time in milliseconds
+#define ANALOG_RES 13     // Resolution of the analog reads (bits)
+#define MILLIDEBOUNCE 20  // Debounce time in milliseconds
+
+#define BUTTON_TOL 300   // Allowable error in bits (Assuming 13bit precision ADC) from the measured button voltages.
+                         // Worst case emperical separation between voltages was about 700 bits.
+                         // Tolerance should be less than half worst case separation. Will be used for +/- tol about setpoints.
+#define BTN_NONE_PRESSED       0x1FFC  // 3.32V (0x1FFC) - No buttons pressed
+#define BTN_RIGHT_MENU_PRESSED 0x18C7  // 2.57V (0x18C7) - Right menu key
+#define BTN_LEFT_MENU_PRESSED  0x1610  // 2.29V (0x1610) - Left menu key
+#define BTN_FWD_TUNE_PRESSED   0x121E  // 1.88V (0x121E) - "Forward fine tuning" pressed
+#define BTN_LEFT_TUNE_PRESSED  0x0C43  // 1.27V (0x0C43) - "Left fine tuning" pressed
+#define BTN_RIGHT_TUNE_PRESSED 0x042F  // 0.44V (0x042F) - "Right fine tuning" pressed
+#define BTN_BACK_TUNE_PRESSED  0x0000  // 0.00V (0x0000) - "Backward fine tuning" pressed
+
+enum BUTTON_T {
+  RIGHT_MENU,
+  LEFT_MENU,
+  FWD_TUNE,
+  LEFT_TUNE,
+  RIGHT_TUNE,
+  BACK_TUNE,
+  NONE
+};
+
+BUTTON_T button_pressed = NONE;
 
 enum analog_indicator {
   wheel_ind,        //horizontal bar (numeric and gauge)
@@ -94,11 +134,6 @@ DIGIT v_tenths = {VOLT_TENT_A, VOLT_TENT_B, VOLT_TENT_C, VOLT_TENT_D, VOLT_TENT_
 XINPUT controller(LED_ENABLED, LEDPIN);
 
 Bounce b1 = Bounce(B1PIN, MILLIDEBOUNCE);
-Bounce b2 = Bounce(B2PIN, MILLIDEBOUNCE);
-Bounce b3 = Bounce(B3PIN, MILLIDEBOUNCE);
-Bounce b4 = Bounce(B4PIN, MILLIDEBOUNCE);
-Bounce b5 = Bounce(B5PIN, MILLIDEBOUNCE);
-Bounce b6 = Bounce(B6PIN, MILLIDEBOUNCE);
 
 struct CAL_DATA {
   long x_min;
@@ -112,6 +147,7 @@ struct CAL_DATA {
 
 int wheelValue = 0;
 int triggerValue = 0;
+int buttonValue = 0;
 float y_avg = pow(2,ANALOG_RES)/2.0;
 float y_avg_last = pow(2,ANALOG_RES)/2.0;
 float x_avg = pow(2,ANALOG_RES)/2.0;
@@ -168,7 +204,7 @@ void calibrate() {
   cal.y_max = 0;
   cal.cksum = 0;
 
-  //Serial5.println("Entering Calibration Mode");
+  HWSERIAL.println("Entering Calibration Mode");
 
   y_segs.DisplayString("CA");
   x_segs.DisplayString("CA");
@@ -221,21 +257,21 @@ void calibrate() {
       //Calculate checksum
       cal.cksum = cal.x_min ^ cal.x_zero ^ cal.x_max ^ cal.y_min ^ cal.y_zero ^ cal.y_max;
       
-      Serial5.println("Calibration sequence finished.");
-      Serial5.print("  x_min:");
-      Serial5.println(cal.x_min, HEX);
-      Serial5.print("  x_zero:");
-      Serial5.println(cal.x_zero, HEX);
-      Serial5.print("  x_max:");
-      Serial5.println(cal.x_max, HEX);
-      Serial5.print("  y_min:");
-      Serial5.println(cal.y_min, HEX);
-      Serial5.print("  y_zero:");
-      Serial5.println(cal.y_zero, HEX);
-      Serial5.print("  y_max:");
-      Serial5.println(cal.y_max, HEX);
-      Serial5.print("  cksum:");
-      Serial5.println(cal.cksum, HEX);
+      HWSERIAL.println("Calibration sequence finished.");
+      HWSERIAL.print("  x_min:");
+      HWSERIAL.println(cal.x_min, HEX);
+      HWSERIAL.print("  x_zero:");
+      HWSERIAL.println(cal.x_zero, HEX);
+      HWSERIAL.print("  x_max:");
+      HWSERIAL.println(cal.x_max, HEX);
+      HWSERIAL.print("  y_min:");
+      HWSERIAL.println(cal.y_min, HEX);
+      HWSERIAL.print("  y_zero:");
+      HWSERIAL.println(cal.y_zero, HEX);
+      HWSERIAL.print("  y_max:");
+      HWSERIAL.println(cal.y_max, HEX);
+      HWSERIAL.print("  cksum:");
+      HWSERIAL.println(cal.cksum, HEX);
       //Write to EEPROM
       
     }
@@ -246,15 +282,10 @@ void calibrate() {
 }
 
 void setup() {
-  Serial5.begin(115200);
+  HWSERIAL.begin(115200);
   
   //Set pin modes
   pinMode(B1PIN, INPUT_PULLUP);
-  pinMode(B2PIN, INPUT_PULLUP);
-  pinMode(B3PIN, INPUT_PULLUP);
-  pinMode(B4PIN, INPUT_PULLUP);
-  pinMode(B5PIN, INPUT_PULLUP);
-  pinMode(B6PIN, INPUT_PULLUP);
 
   //Increase resolution of analog inputs.
   analogReadResolution(ANALOG_RES);
@@ -270,7 +301,7 @@ void setup() {
   y_segs.DisplayString("21");
   x_segs.DisplayString("68");
   lcd.update();
-  delay(750);
+  delay(500);
   LCDSegsOff();
 
   //TODO: Add analog stick calibration. Store to eeprom
@@ -320,21 +351,17 @@ void loop() {
   
   //Read pin values
   b1.update();
-  b2.update();
-  b3.update();
-  b4.update();
-  b5.update();
-  b6.update();
   wheelValue = analogRead(AN1PIN);
   triggerValue = analogRead(AN2PIN);
 
-  //Update buttons
-  controller.buttonUpdate(BUTTON_A, !b1.read());
-  controller.buttonUpdate(BUTTON_B, !b2.read());
-  controller.buttonUpdate(BUTTON_X, !b3.read());
-  controller.buttonUpdate(BUTTON_Y, !b4.read());
-  controller.buttonUpdate(BUTTON_BACK, !b5.read());
-  controller.buttonUpdate(BUTTON_START, !b6.read());
+  //Update button states
+  button_pressed = check_buttons(analogRead(AN3PIN));
+  controller.buttonUpdate(BUTTON_A, button_pressed == FWD_TUNE);
+  controller.buttonUpdate(BUTTON_B, button_pressed == LEFT_TUNE);
+  controller.buttonUpdate(BUTTON_X, button_pressed == RIGHT_TUNE);
+  controller.buttonUpdate(BUTTON_Y, button_pressed == BACK_TUNE);
+  controller.buttonUpdate(BUTTON_BACK, button_pressed == LEFT_MENU);
+  controller.buttonUpdate(BUTTON_START, button_pressed == RIGHT_MENU);
 
   //Update analog sticks
   controller.stickUpdate(STICK_LEFT, scaleStick(wheel_axis, wheelValue),
@@ -368,7 +395,6 @@ void loop() {
 
   //Dump LCD data out to the screen
   lcd.update();
-
   delay(40);
 }
 
@@ -475,5 +501,40 @@ long min(long a, long b) {
   } else {
     return b;
   }
+}
+
+/**
+ * Checks if any of the buttons are pressed.
+ * Note all buttons wire into a single analog input channel. If more than one button is pressed at a time,
+ * the one with the least resistance to ground wins (electrical constraint).
+ * 
+ * value - The value read from the 13bit ADC from the button input pin.
+ */
+BUTTON_T check_buttons(int value) {
+  BUTTON_T retval = NONE;
+
+  //Walk down the voltages to see if anything was pressed.
+  if(value >= (BTN_NONE_PRESSED - BUTTON_TOL)) {
+    retval = NONE;
+  } else if(value <= (BTN_RIGHT_MENU_PRESSED + BUTTON_TOL)
+      && value >= (BTN_RIGHT_MENU_PRESSED - BUTTON_TOL)) {
+    retval = RIGHT_MENU;
+  } else if(value <= (BTN_LEFT_MENU_PRESSED + BUTTON_TOL)
+      && value >= (BTN_LEFT_MENU_PRESSED - BUTTON_TOL)) {
+    retval = LEFT_MENU;
+  } else if(value <= (BTN_FWD_TUNE_PRESSED + BUTTON_TOL)
+      && value >= (BTN_FWD_TUNE_PRESSED - BUTTON_TOL)) {
+    retval = FWD_TUNE;
+  } else if(value <= (BTN_LEFT_TUNE_PRESSED + BUTTON_TOL)
+      && value >= (BTN_LEFT_TUNE_PRESSED - BUTTON_TOL)) {
+    retval = LEFT_TUNE;
+  } else if(value <= (BTN_RIGHT_TUNE_PRESSED + BUTTON_TOL)
+      && value >= (BTN_RIGHT_TUNE_PRESSED - BUTTON_TOL)) {
+    retval = RIGHT_TUNE;
+  } else if(value <= (BTN_BACK_TUNE_PRESSED + BUTTON_TOL)) {
+    retval = BACK_TUNE;
+  }
+  
+  return retval;
 }
 
