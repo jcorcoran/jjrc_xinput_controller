@@ -2,7 +2,7 @@
 //Supports buttons, analog sticks, and rumble.
 //Originally implemented using the JJRC Q35-01 transmitter which retails for around $15
 //  HT1621 LCD driver chip.
-//  Teensy 3.5
+//  Tested with Teensy 3.5 & Teensy LC
 //Author: james@team2168.org
 
 //SETUP INSTRUCTIONS:
@@ -21,7 +21,6 @@
 
 //Pinouts chosend to try to keep compatible with TeensyLC implementation
 //DIGITAL INPUT PINS
-#define B1PIN 0 //Temporary until the analog input buttons are functional
 
 //DIGITAL OUTPUT PINS
 #define LEDPIN 13       // Pin 13
@@ -52,14 +51,6 @@
 #define VIBE1PIN 22      // Pin 22 (A8), 'Heavy' weight vibrator motor
 #define VIBE2PIN 23      // Pin 23 (A9), 'Light' weight vibrator motor
 
-//DIGITAL OUTPUT PINS
-#define LEDPIN 13       //
-
-//LCD INTERFACE
-#define LCD_CSPIN   10    //
-#define LCD_WRPIN   11    // 
-#define LCD_DATAPIN 12    //
-
 ht1621_LCD lcd;
 
 #define ANALOG_RES 13     // Resolution of the analog reads (bits)
@@ -87,6 +78,8 @@ enum BUTTON_T {
 };
 
 BUTTON_T button_pressed = NONE;
+#define CAL_BUTTON RIGHT_MENU      //Button to press to enter/exit the calibration menu
+#define CAL_EXIT_BUTTON LEFT_MENU  //Button to hold to exit cal without saving changes
 
 enum analog_indicator {
   wheel_ind,        //horizontal bar (numeric and gauge)
@@ -133,9 +126,7 @@ DIGIT v_tenths = {VOLT_TENT_A, VOLT_TENT_B, VOLT_TENT_C, VOLT_TENT_D, VOLT_TENT_
 //Initiate the class and setup the LED pin
 XINPUT controller(LED_ENABLED, LEDPIN);
 
-Bounce b1 = Bounce(B1PIN, MILLIDEBOUNCE);
-
-struct CAL_DATA {
+struct CAL_DATA_T {
   long x_min;
   long x_zero;
   long x_max;
@@ -143,7 +134,7 @@ struct CAL_DATA {
   long y_zero;
   long y_max;
   long cksum; //XOR of previous fields 
-};
+} cal_data;
 
 int wheelValue = 0;
 int triggerValue = 0;
@@ -191,102 +182,14 @@ ANALOG_T radio_axis = {0,   //Initial val
 
 fSevSeg y_segs, x_segs, volt_segs;
 
-void calibrate() {
-  boolean calFinished = false;
-
-  CAL_DATA cal;
-  
-  cal.x_min = pow(2,ANALOG_RES);
-  cal.x_zero = 0;
-  cal.x_max = 0;
-  cal.y_min = pow(2,ANALOG_RES);
-  cal.y_zero = 0;
-  cal.y_max = 0;
-  cal.cksum = 0;
-
-  HWSERIAL.println("Entering Calibration Mode");
-
-  y_segs.DisplayString("CA");
-  x_segs.DisplayString("CA");
-  volt_segs.DisplayString("CA");
-  setBorders(true);
-  lcd.update();
-  
-  //Wait until the calibration button is released before procedding.
-  while(!b1.read()){
-    b1.update();
-    delay(5);
-  }
-  
-  while(!calFinished) {
-    wheelValue = analogRead(AN1PIN);
-    triggerValue = analogRead(AN2PIN);
-
-    y_avg = iir(y_avg_last, triggerValue);
-    x_avg = iir(x_avg_last, wheelValue);
-    y_avg_last = y_avg;
-    x_avg_last = x_avg;
-
-    y_segs.DisplayIntHex(map(y_avg, 0, pow(2,ANALOG_RES), 0x00, 0xFF));
-    x_segs.DisplayIntHex(map(x_avg, 0, pow(2,ANALOG_RES), 0x00, 0xFF));
-
-    updateGauge(wheel_ind, wheelValue, 0, pow(2,ANALOG_RES));
-    updateGauge(throttle_ind, triggerValue, 0, pow(2,ANALOG_RES));
-
-    //Update new min/max values
-    cal.x_min = min(cal.x_min, x_avg); 
-    cal.x_max = max(cal.x_max, x_avg);
-    cal.y_min = min(cal.y_min, y_avg);
-    cal.y_max = max(cal.y_max, y_avg);
-
-    b1.update();
-    //Check if calibration is complete (button held for 1s)
-    for(int i=0; !b1.read() && !calFinished; i++) {
-      if(i > 100) {
-        calFinished=true;
-      }
-      b1.update();
-      delay(10);
-    }
-
-    if(calFinished) {
-      //Store zeros
-      cal.x_zero = x_avg;
-      cal.y_zero = y_avg;
-
-      //Calculate checksum
-      cal.cksum = cal.x_min ^ cal.x_zero ^ cal.x_max ^ cal.y_min ^ cal.y_zero ^ cal.y_max;
-      
-      HWSERIAL.println("Calibration sequence finished.");
-      HWSERIAL.print("  x_min:");
-      HWSERIAL.println(cal.x_min, HEX);
-      HWSERIAL.print("  x_zero:");
-      HWSERIAL.println(cal.x_zero, HEX);
-      HWSERIAL.print("  x_max:");
-      HWSERIAL.println(cal.x_max, HEX);
-      HWSERIAL.print("  y_min:");
-      HWSERIAL.println(cal.y_min, HEX);
-      HWSERIAL.print("  y_zero:");
-      HWSERIAL.println(cal.y_zero, HEX);
-      HWSERIAL.print("  y_max:");
-      HWSERIAL.println(cal.y_max, HEX);
-      HWSERIAL.print("  cksum:");
-      HWSERIAL.println(cal.cksum, HEX);
-      //Write to EEPROM
-      
-    }
-
-    lcd.update();
-    delay(10);
-  }
-}
-
 void setup() {
+  BUTTON_T b;
   HWSERIAL.begin(115200);
-  
-  //Set pin modes
-  pinMode(B1PIN, INPUT_PULLUP);
 
+  HWSERIAL.println("");
+  HWSERIAL.println("");
+  HWSERIAL.println("FRC2168 - XINPUT Controller - github.com/jcorcoran/jjrc_xinput_controller");
+    
   //Increase resolution of analog inputs.
   analogReadResolution(ANALOG_RES);
 
@@ -309,18 +212,19 @@ void setup() {
   //      Hold button(s) on startup to enter cal mode.
   //      Hold same buttons for duration to leave cal mode.
   //      Vibrate for confirmation of entering/exiting mode.
-  
-  b1.update();
-  if(!b1.read()) {
-    //Must continue to hold button for 0.5s
-    for(int i=0; i<100 && !b1.read(); i++){
-      b1.update();
-      delay(5);
-    }
-    if(!b1.read()) {
-      calibrate(); //Enter Calibration Mode
-    }
+
+  b = read_buttons();
+  //Must continue to hold button for 5s
+  for(int i=0; i<1000 && b == CAL_BUTTON; i++){
+    b = read_buttons();
+    delay(5);
   }
+  if(b == CAL_BUTTON) {
+    calibrate(); //Enter Calibration Mode
+  }
+
+  //Load in CAL data from EEPROM
+  read_cal();
 
   setBorders(true);
   lcd.setSeg(Y_PERCENT);
@@ -350,12 +254,11 @@ void loop() {
   int abs_throttle = 0;
   
   //Read pin values
-  b1.update();
   wheelValue = analogRead(AN1PIN);
   triggerValue = analogRead(AN2PIN);
 
   //Update button states
-  button_pressed = check_buttons(analogRead(AN3PIN));
+  button_pressed = read_buttons();
   controller.buttonUpdate(BUTTON_A, button_pressed == FWD_TUNE);
   controller.buttonUpdate(BUTTON_B, button_pressed == LEFT_TUNE);
   controller.buttonUpdate(BUTTON_X, button_pressed == RIGHT_TUNE);
@@ -371,7 +274,7 @@ void loop() {
   analogWrite(VIBE1PIN, controller.rumbleValues[0]);
   analogWrite(VIBE2PIN, controller.rumbleValues[1]);
 
-  controller.LEDUpdate();     //Update the LEDs
+//  controller.LEDUpdate();     //Update the LEDs
   controller.sendXinput();    //Send data
   controller.receiveXinput(); //Receive data
 
@@ -507,10 +410,9 @@ long min(long a, long b) {
  * Checks if any of the buttons are pressed.
  * Note all buttons wire into a single analog input channel. If more than one button is pressed at a time,
  * the one with the least resistance to ground wins (electrical constraint).
- * 
- * value - The value read from the 13bit ADC from the button input pin.
  */
-BUTTON_T check_buttons(int value) {
+BUTTON_T read_buttons() {
+  int value = analogRead(AN3PIN);
   BUTTON_T retval = NONE;
 
   //Walk down the voltages to see if anything was pressed.
@@ -538,3 +440,136 @@ BUTTON_T check_buttons(int value) {
   return retval;
 }
 
+void calibrate() {
+  boolean calFinished = false;
+  boolean calExited = false;
+  BUTTON_T b = CAL_BUTTON;
+  CAL_DATA_T cal;
+
+  cal.x_min = pow(2,ANALOG_RES);
+  cal.x_zero = 0;
+  cal.x_max = 0;
+  cal.y_min = pow(2,ANALOG_RES);
+  cal.y_zero = 0;
+  cal.y_max = 0;
+  cal.cksum = 0;
+
+  HWSERIAL.println("Entering Calibration Mode");
+
+  y_segs.DisplayString("CA");
+  x_segs.DisplayString("CA");
+  volt_segs.DisplayString("CA");
+  setBorders(true);
+  lcd.update();
+  
+  //Wait until the calibration button is released before procedding.
+  while(b == CAL_BUTTON){
+    b = read_buttons();
+    delay(10);
+  }
+  
+  while(!calFinished && !calExited) {
+    wheelValue = analogRead(AN1PIN);
+    triggerValue = analogRead(AN2PIN);
+
+    y_avg = iir(y_avg_last, triggerValue);
+    x_avg = iir(x_avg_last, wheelValue);
+    y_avg_last = y_avg;
+    x_avg_last = x_avg;
+
+    y_segs.DisplayIntHex(map(y_avg, 0, pow(2,ANALOG_RES), 0x00, 0xFF));
+    x_segs.DisplayIntHex(map(x_avg, 0, pow(2,ANALOG_RES), 0x00, 0xFF));
+
+    updateGauge(wheel_ind, wheelValue, 0, pow(2,ANALOG_RES));
+    updateGauge(throttle_ind, triggerValue, 0, pow(2,ANALOG_RES));
+
+    //Update new min/max values
+    cal.x_min = min(cal.x_min, x_avg); 
+    cal.x_max = max(cal.x_max, x_avg);
+    cal.y_min = min(cal.y_min, y_avg);
+    cal.y_max = max(cal.y_max, y_avg);
+
+    b = read_buttons();
+    //Check if calibration is complete (CAL button held for 5s)
+    for(int i=0; (b == CAL_BUTTON) && !calFinished; i++) {
+      if(i > 100) {
+        calFinished=true;
+      }
+      b = read_buttons();
+      delay(50);
+    }
+
+    //Check if cal is being exited (don't write changes to EEPROM (CAL_EXIT button held for 100ms)
+    for(int i=0; (b == CAL_EXIT_BUTTON) && !calExited; i++) {
+      if(i > 10) {
+        HWSERIAL.println("Exiting Calibration Mode");
+        calExited=true;
+      }
+      b = read_buttons();
+      delay(10);
+    }
+
+    if(calFinished) {
+      //Store zeros
+      cal.x_zero = x_avg;
+      cal.y_zero = y_avg;
+
+      //Calculate checksum
+      cal.cksum = cal.x_min ^ cal.x_zero ^ cal.x_max ^ cal.y_min ^ cal.y_zero ^ cal.y_max;
+      HWSERIAL.println("Calibration sequence finished.");
+      print_cal(cal);
+      
+      //Write to EEPROM
+      store_cal(cal);
+    }
+
+    lcd.update();
+    delay(10);
+  }
+}
+
+/**
+ * Reads the stored calibration data from EEPROM
+ * Returns true if data is valid, false otherwise.
+ */
+boolean read_cal() {
+  CAL_DATA_T cal;
+  boolean retval = false;
+
+  eeprom_read_block((void*)&cal, (void*)0, sizeof(cal));
+  print_cal(cal);
+
+  //Check checksum
+  if(cal.cksum == (cal.x_min ^ cal.x_zero ^ cal.x_max ^ cal.y_min ^ cal.y_zero ^ cal.y_max)) {
+    HWSERIAL.println("Checksum good.");
+    retval = true;
+  } else {
+    HWSERIAL.println("Checksum bad! :(");
+  }
+
+  return retval;
+}
+
+void store_cal(CAL_DATA_T cal) {
+  HWSERIAL.println("Writing cal data");
+  eeprom_update_block((void*)&cal, (void*)0, sizeof(cal));
+  delay(100);
+}
+
+void print_cal(CAL_DATA_T cal) {
+  HWSERIAL.println("Calibration data:");
+  HWSERIAL.print("  x_min:");
+  HWSERIAL.println(cal.x_min, HEX);
+  HWSERIAL.print("  x_zero:");
+  HWSERIAL.println(cal.x_zero, HEX);
+  HWSERIAL.print("  x_max:");
+  HWSERIAL.println(cal.x_max, HEX);
+  HWSERIAL.print("  y_min:");
+  HWSERIAL.println(cal.y_min, HEX);
+  HWSERIAL.print("  y_zero:");
+  HWSERIAL.println(cal.y_zero, HEX);
+  HWSERIAL.print("  y_max:");
+  HWSERIAL.println(cal.y_max, HEX);
+  HWSERIAL.print("  cksum:");
+  HWSERIAL.println(cal.cksum, HEX);
+}
