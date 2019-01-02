@@ -1,7 +1,7 @@
 # jjrc_xinput_controller 
 <img src="https://github.com/jcorcoran/jjrc_xinput_controller/raw/master/images/jjrc_controller.png" width="200" title="jjrc_controller"></img>  
 Custom [Teensy](https://www.pjrc.com/teensy/) based RC controller for FRC using XBOX Controller Driver (XINPUT). Thanks to the [MSF-XINPUT](https://github.com/zlittell/MSF-XINPUT) library for making this easy.  
-Supports buttons, analog sticks, and rumble.
+Supports buttons, analog sticks (with built in calibration), rumble motors, and LED control.
 -  Implemented using the JJRC Q35-01 transmitter which retails for around $15
 -  Using Teensy 3.5 for testing, plan to ultimately target the TeensyLC
 -  10mm x 2mm Pancake Vibration Motor
@@ -17,16 +17,32 @@ Supports buttons, analog sticks, and rumble.
 
 
 ## Software Setup Instructions:
--  Install Arduino IDE
--  Install TeensyDuino
--  Install MSF-XINPUT into arduino libraries folder. Copy files from the 'Teensyduino Files that were edited' directory into the hardware directory within the arduino installation directory.
+-  Install [Arduino IDE](https://www.arduino.cc/en/Main/Software)
+-  Install [TeensyDuino](https://www.pjrc.com/teensy/td_download.html)
+-  Install [MSF-XINPUT](https://github.com/dmadison/MSF-XINPUT) into arduino libraries folder (e.g. C:\Program Files (x86)\Arduino\libraries\MSF_XINPUT).
+-  Copy files from the MSF-XINPUT 'Teensyduino Files that were edited' directory into the hardware directory within the arduino installation directory (e.g. C:\Program Files (x86)\Arduino\hardware).
 -  Select your Teensy board from Tools > Board in Arduino IDE
 -  Select Tools > Usb Type > XInput
 -  Deploy this sketch to Teensy
 
 ## JJRC control board pinout
 ![](images/pinout2.png)
-The Plan is to desolder the STM8S003F3 and RF chips from the RC transmitter's main control board. All Teensy IO signals come back to this central location. The picture above identifies where relevant signals are located on the PCB. These signals need to be wired up to the Teensy at the pins designated in the code.  
+The STM8S003F3 (U1), RF chip (JP1), antenna, and crystal oscillator were desoldered from the main control board. All Teensy IO signals come back to this central location. The picture above identifies where relevant signals are located on the PCB. These signals need to be wired up to the Teensy at the pins designated in the source code. 
+Note that the pad spacing for the STM8S makes hand soldering to these pins difficult. In most cases there are test points or vias in close proximity to the STM pads. Carefully removiving the soldermask above these locations will make soldering to the PCB easier.  
+
+![](images/ICs_removed.png)  
+
+| Signal Name | Teensy Pin | Destination solder point | Notes |
+| :---------- | :--------: | :----------------------- | :---- |
+| LEDs        | 13         | Test point pad adjacent to STM pin 11 | Controls whether the LED backlights behind buttons are illuminated. |
+| LCD CS      | 10         | LCD JST header pin | |
+| LCD WR      | 11         | LCD JST header pin | |
+| LCD DATA    | 12         | LCD JST header pin | |
+| Wheel Position | 14      | Wheel potentiometer JST header | |
+| Trigger Position | 15    | Trigger potentiometer JST header | |
+| Buttons     | 16         | Via adjacent to STM pin 19. Under STM IC when board is populated | All buttons state fed to this input through resistive network. |
+| Vibe Motor 1 | 22        | vibration motor circuit | |
+| Vibe Motor 2 (TBD) | 23        | vibration motor circuit | |
 
 ### STM8S Reuse
 __NOTE:__ *It should be possible to re-program the STM8 onboard this PCB.
@@ -50,7 +66,7 @@ Note that the software drives this transistor from an analog output channel on t
 We're able to plug a transistor into this analog outputpin, because of the fact that it's actually a digital output being PWMed. The signal ocming out of the analog pin is always either 3.3v or 0v. As long as the transistor's switching times can keep up with the frequency that the analog output pin is being driven, then the motor's speed will be controllable from the Teensy. The analog pin's voltage % output will be 1:1 with the percentage of the bus voltage driving the motor.
 
 ## LCD Interface
-A USB logic analyzer was used to monitor communications between the stock microcontroller and the LCD. Using these communication dumps and the names used for pins on the LCD PCB, it was possible to identify the LCD driver chip as most likely being a HT1621.
+A USB logic analyzer was used to monitor communications between the stock microcontroller and the LCD. Using these communication dumps and the names used for pins on the LCD PCB, it was possible to identify the LCD driver chip as most likely being a HT1621 (the IC driving the lcb is below an unmarked epoxy blob).
 
 For details on how the LCD driver chip works refer to: https://www.seeedstudio.com/document/HT1621.pdf
 
@@ -61,4 +77,5 @@ The HT1621 LCD driver chip has a fairly simple command interface. Communications
 
 The commands allow direct control of the LCDs display memory. Memory is organized in 32 segments (6 address bits). Each segment contains 4 data bits. This organization structure directly maps to the physical interface this chip has to the LCD itself,  4 COM lines and 32 SEG lines. This allows up to 32x4 unique patterns to be displayed on the LCD. "Up to" because this is dependant on how many segments are actually present on the LCD and how it was wired.  
 The HT1621 supports arbitrarily writing to any memory segment or a speed optimized command which allows writing data to successive segments without continually providing the address to write into. While this would improve performance, it looks like the stock implementation doesn't bother using this command. It walks successive memory addresses, but always uses the verbose write command (providing the explicit memory address along with each 4 bit data block). My only guess as to why the developers may have written their software this way (other than just being lazy) is that there may be some fault tolerance provided. If data were to be malformed/corrupted, there's no way for one fault to propogate through the remainder of your data set. Worst case you have a single segment get corrupted.
- 
+
+See the data captures and readme file within the [logic_analyzer](https://github.com/jcorcoran/jjrc_xinput_controller/tree/master/logic_analyzer) directory for more info on the LCD commmunications interface.
