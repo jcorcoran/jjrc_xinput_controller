@@ -67,5 +67,7 @@ All non-listed addresses were zero ("0000").
 | 101 | 011111-1000  | |
 
 
-
-Once I have the LCD code running on the Teensy, I'll be able to walk the memory addresses and correlate them to LCD segments.
+# Results
+Using the above information, an application was written that would step through all LCD segments one at a time in response to a button press on a discrete input channel.  
+A full addresses to segment map was painstakingly collected one segment at a time. Tedious but straightforward work.  
+The results of this effort can be found within the [ht1621_LCD.h file](https://github.com/jcorcoran/jjrc_xinput_controller/blob/master/jjrc_xinput_controller/src/ht1621_LCD/ht1621_LCD.h)
