@@ -12,14 +12,24 @@
 // - Select yout Teensy board from Tools > Board in Arduino IDE
 // - Select Tools > Usb Type > XInput
 
+#include <Bounce.h>
 #include <EEPROM.h>
-#include <xinput.h> //Include the XINPUT library
+#include <xinput.h>
 
 #include "src/ht1621_LCD/ht1621_LCD.h"
 #include "src/fSevSeg/fSevSeg.h"
 
+//DISABLED ANALOG INPUTS
+#define LEFT_STICK_DISABLED false
+#define RIGHT_STICK_DISABLED true
+#define TRIGGER_DISABLED true
+
 //Pinouts chosend to try to keep compatible with TeensyLC implementation
 //DIGITAL INPUT PINS
+#define AUX1_PIN 0      // Pin 0, Auxiliary discrete input 1
+#define AUX2_PIN 1      // Pin 1, Auxiliary discrete input 2
+#define AUX3_PIN 2      // Pin 2, Auxiliary discrete input 3
+#define AUX4_PIN 3      // Pin 3, Auxiliary discrete input 4
 
 //DIGITAL OUTPUT PINS
 #define LEDPIN 13       // Pin 13
@@ -45,6 +55,10 @@
                         //         1.27V (0x0C43) - "Left fine tuning" pressed
                         //         0.44V (0x042F) - "Right fine tuning" pressed
                         //         0.00V (0x0000) - "Backward fine tuning" pressed
+#define AN4PIN 3        // Pin 17, Aux. analog input 1
+#define AN5PIN 4        // Pin 18, Aux. analog input 2
+#define AN6PIN 5        // Pin 19, Aux. analog input 3
+#define AN7PIN 6        // Pin 20, Aux. analog input 4
                         
 //ANALOG OUTPUT PINS
 #define VIBE1PIN 22      // Pin 22 (A8), 'Heavy' weight vibrator motor
@@ -122,7 +136,8 @@ DIGIT v_ones = {VOLT_ONES_A, VOLT_ONES_B, VOLT_ONES_C, VOLT_ONES_D, VOLT_ONES_E,
 DIGIT v_tenths = {VOLT_TENT_A, VOLT_TENT_B, VOLT_TENT_C, VOLT_TENT_D, VOLT_TENT_E, VOLT_TENT_F, VOLT_TENT_G};
 
 //Initiate the class and setup the LED pin
-XINPUT controller(LED_ENABLED, LEDPIN);
+XINPUT controller(NO_LED);
+int last_led_pattern = LED_ENABLED;
 
 struct CAL_DATA_T {
   long x_min; //wheel
@@ -135,6 +150,12 @@ struct CAL_DATA_T {
 } cal_data;
 
 boolean cal_valid = false;
+
+#define MILLIDEBOUNCE 20  //Button debounce time in milliseconds
+Bounce aux1 = Bounce(AUX1_PIN, MILLIDEBOUNCE);
+Bounce aux2 = Bounce(AUX2_PIN, MILLIDEBOUNCE);
+Bounce aux3 = Bounce(AUX3_PIN, MILLIDEBOUNCE);
+Bounce aux4 = Bounce(AUX4_PIN, MILLIDEBOUNCE);
 
 int wheelValue = 0;
 int triggerValue = 0;
@@ -184,12 +205,19 @@ fSevSeg y_segs, x_segs, volt_segs;
 
 void setup() {
   BUTTON_T b;
+
+  pinMode(LEDPIN, OUTPUT);
+  pinMode(AUX1_PIN, INPUT_PULLUP);
+  pinMode(AUX2_PIN, INPUT_PULLUP);
+  pinMode(AUX3_PIN, INPUT_PULLUP);
+  pinMode(AUX4_PIN, INPUT_PULLUP);
+
   HWSERIAL.begin(115200);
 
   HWSERIAL.println("");
   HWSERIAL.println("");
   HWSERIAL.println("FRC2168 - XINPUT Controller - github.com/jcorcoran/jjrc_xinput_controller");
-    
+
   //Increase resolution of analog inputs.
   analogReadResolution(ANALOG_RES);
 
@@ -234,10 +262,14 @@ void setup() {
 
 void loop() {
   int abs_throttle = 0;
-  
+
   //Read pin values
-  wheelValue = analogRead(AN1PIN);
-  triggerValue = analogRead(AN2PIN);
+  aux1.update();
+  aux2.update();
+  aux3.update();
+  aux4.update();
+  wheelValue = avgAnalogRead(AN1PIN);
+  triggerValue = avgAnalogRead(AN2PIN);
 
   //If we have valid cal data, adjust the raw analog inputs
   if(cal_valid) {
@@ -253,16 +285,32 @@ void loop() {
   controller.buttonUpdate(BUTTON_Y, button_pressed == BACK_TUNE);
   controller.buttonUpdate(BUTTON_BACK, button_pressed == LEFT_MENU);
   controller.buttonUpdate(BUTTON_START, button_pressed == RIGHT_MENU);
+  controller.buttonUpdate(BUTTON_LB, !aux1.read());
+  controller.buttonUpdate(BUTTON_RB, !aux2.read());
+  controller.buttonUpdate(BUTTON_L3, !aux3.read());
+  controller.buttonUpdate(BUTTON_R3, !aux4.read());
 
   //Update analog sticks
-  controller.stickUpdate(STICK_LEFT, xinput_scale_sticks(wheelValue),
-    xinput_scale_sticks(triggerValue));
+  if(!LEFT_STICK_DISABLED) {
+    controller.stickUpdate(STICK_LEFT, xinput_scale_sticks(wheelValue),
+      xinput_scale_sticks(triggerValue));
+  }
+  if(!RIGHT_STICK_DISABLED) {
+    controller.stickUpdate(STICK_RIGHT, xinput_scale_sticks(avgAnalogRead(AN4PIN)),
+      xinput_scale_sticks(avgAnalogRead(AN5PIN)));
+  }
+  if(!TRIGGER_DISABLED) {
+    controller.triggerUpdate(xinput_scale_trigger(avgAnalogRead(AN6PIN)),
+      xinput_scale_trigger(avgAnalogRead(AN7PIN)));
+  }
 
   //Update rumbles
   analogWrite(VIBE1PIN, controller.rumbleValues[0]);
   analogWrite(VIBE2PIN, controller.rumbleValues[1]);
 
-//  controller.LEDUpdate();     //Update the LEDs
+  //TODO - Flash lights along with Rumble 2
+
+
   controller.sendXinput();    //Send data
   controller.receiveXinput(); //Receive data
 
@@ -286,7 +334,7 @@ void loop() {
 
   //Dump LCD data out to the screen
   lcd.update();
-  delay(40);
+  delay(35);
 }
 
 void LCDSegsOff() {
@@ -400,7 +448,7 @@ long min(long a, long b) {
  * the one with the least resistance to ground wins (electrical constraint).
  */
 BUTTON_T read_buttons() {
-  int value = analogRead(AN3PIN);
+  int value = avgAnalogRead(AN3PIN);
   BUTTON_T retval = NONE;
 
   //Walk down the voltages to see if anything was pressed.
@@ -457,8 +505,8 @@ void calibrate() {
   }
   
   while(!calFinished && !calExited) {
-    wheelValue = analogRead(AN1PIN);
-    triggerValue = analogRead(AN2PIN);
+    wheelValue = avgAnalogRead(AN1PIN);
+    triggerValue = avgAnalogRead(AN2PIN);
 
     y_avg = iir(y_avg_last, triggerValue);
     x_avg = iir(x_avg_last, wheelValue);
@@ -565,10 +613,35 @@ void print_cal(CAL_DATA_T cal) {
 
 /**
  * Scale the analog inputs to the range used by joystick function.
+ *
  */
 int xinput_scale_sticks(int val) {
   int _out_max = 32767;
   int _out_min = -32768;
+  int _in_min = 0;
+  int _in_max = pow(2,ANALOG_RES);
+  int _in_zero = (_in_max - _in_min)/2;
+  int ret = 0;
+
+  if(val >= _in_zero) { //Scale the high side
+    ret = map(val, _in_zero, _in_max, 0, _out_max);
+  } else {  //Scale the low side
+    ret = map(val, _in_min, _in_zero, _out_min, 0);
+  }
+  
+  return ret;
+}
+
+/**
+ * Scale the analog inputs to the range used by joystick trigger function.
+ * 
+ * Note each axis only operates over half the range (0 - 3V)
+ *   left trigger is the low side of the range (0 - 1.5V)
+ *   right trigger is the high side of the range (1.5 - 3V)
+ */
+int xinput_scale_trigger(int val) {
+  int _out_max = 0xFF;
+  int _out_min = 0;
   int _in_min = 0;
   int _in_max = pow(2,ANALOG_RES);
   int _in_zero = (_in_max - _in_min)/2;
@@ -624,4 +697,15 @@ int cal_scale_axis(analog_axis axis, int val) {
   }
 
   return ret;
+}
+
+int avgAnalogRead(int channel) {
+  #define SAMPLES 5
+  int average = 0;
+
+  for(int i=0; i < SAMPLES; i++) {
+    average += analogRead(channel);
+  }
+
+  return average / SAMPLES;
 }
